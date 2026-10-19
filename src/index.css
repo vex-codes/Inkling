@@ -1,0 +1,198 @@
+@import "tailwindcss";
+
+/* ── Paper stocks ─────────────────────────────────────────────────────────────
+   Every surface reads from these; [data-theme] on <html> swaps the whole room. */
+:root,
+[data-theme="cream"] {
+  --paper: #F9F6EE; --ink: #2B2523; --desk: #E7DFCE; --card: #FDFBF6; --back: #ECE4D2;
+  --soft: rgb(43 37 35 / .7); --line: rgb(43 37 35 / .12); --shade: 43 37 35; --accent: #8C3B2E;
+}
+[data-theme="parchment"] {
+  --paper: #F4EFEA; --ink: #262322; --desk: #E1D6C9; --card: #FAF7F3; --back: #E7DED3;
+  --soft: rgb(38 35 34 / .7); --line: rgb(38 35 34 / .12); --shade: 38 35 34; --accent: #8C3B2E;
+}
+[data-theme="sage"] {
+  --paper: #EAEFE9; --ink: #202B24; --desk: #D2DBD0; --card: #F4F7F3; --back: #DAE2D7;
+  --soft: rgb(32 43 36 / .72); --line: rgb(32 43 36 / .13); --shade: 32 43 36; --accent: #7A4A2E;
+}
+[data-theme="midnight"] {
+  --paper: #181615; --ink: #D8D2C4; --desk: #0D0C0B; --card: #221F1D; --back: #2B2623;
+  --soft: rgb(216 210 196 / .64); --line: rgb(216 210 196 / .12); --shade: 0 0 0; --accent: #D49C76;
+  color-scheme: dark;
+}
+
+/* Watercolor inks as RGB triplets so components can mix their own alpha: rgb(var(--c) / .3) */
+:root {
+  --ochre: 207 155 52; --rose: 199 110 122; --sage: 112 152 102; --indigo: 86 120 180; --lilac: 150 116 186;
+  --margin-w: 200px;
+}
+@media (max-width: 820px) { :root { --margin-w: 168px; } }
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-desk: var(--desk);
+  --color-card: var(--card);
+  --color-soft: var(--soft);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --font-serif: "EB Garamond", Garamond, "Iowan Old Style", Georgia, serif;
+  --font-hand: "Caveat", "Bradley Hand", cursive;
+  --font-sans: "Atkinson Hyperlegible", system-ui, sans-serif;
+}
+
+/* ── Base ─────────────────────────────────────────────────────────────────── */
+html { background: var(--desk); color: var(--ink); transition: background-color .5s ease, color .5s ease; }
+body {
+  margin: 0; min-height: 100dvh; font-family: var(--font-serif); -webkit-font-smoothing: antialiased;
+  background:
+    radial-gradient(120% 80% at 50% 0%, transparent 40%, rgb(var(--shade) / .07) 100%),
+    var(--desk);
+}
+::selection { background: rgb(var(--ochre) / .3); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.smallcaps { font-variant: all-small-caps; letter-spacing: .08em; }
+
+/* Fine paper grain shared by sheets and slips */
+.grain {
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ── Reading sheet + 3D dogear ───────────────────────────────────────────────
+   --fold is a registered <length> so the corner can animate; clip-path cuts the
+   corner and .flap draws its folded back. Shadow lives on the wrapper as a
+   drop-shadow so it follows the clipped silhouette. */
+@property --fold { syntax: "<length>"; inherits: true; initial-value: 0px; }
+
+.sheet-wrap {
+  padding-inline: 2.5rem; /* room for sticky tabs past the paper edge */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 1200px;
+  filter: drop-shadow(0 1px 1px rgb(var(--shade) / .08)) drop-shadow(0 14px 22px rgb(var(--shade) / .11));
+}
+[data-theme="midnight"] .sheet-wrap { filter: drop-shadow(0 0 1px rgb(216 210 196 / .14)) drop-shadow(0 14px 26px rgb(0 0 0 / .55)); }
+
+.sheet {
+  --fold: 0px;
+  position: relative;
+  background-color: var(--paper);
+  background-image: linear-gradient(90deg, rgb(var(--shade) / .06), transparent 2.5rem);
+  clip-path: polygon(0 0, calc(100% - var(--fold)) 0, 100% var(--fold), 100% 100%, 0 100%);
+  transition: --fold .5s cubic-bezier(.34, 1.4, .5, 1), background-color .5s ease;
+}
+.sheet:has(> .dogear:hover) { --fold: 18px; }
+.sheet[data-folded="true"] { --fold: 46px; }
+.flap {
+  position: absolute; top: 0; right: 0; width: var(--fold); height: var(--fold); pointer-events: none;
+  background: linear-gradient(225deg, transparent 50%, rgb(var(--shade) / .22) 50%, var(--back) 54%, var(--paper) 100%);
+  filter: drop-shadow(-2px 3px 3px rgb(var(--shade) / .16));
+}
+
+/* ── Prose ─────────────────────────────────────────────────────────────────── */
+.prose-ink {
+  font-family: var(--read-font); font-size: var(--read-size); line-height: var(--read-leading);
+  width: calc(var(--read-measure) * 1ch); max-width: 100%;
+  hyphens: auto; text-wrap: pretty; font-variant-numeric: oldstyle-nums; font-kerning: normal;
+  transition: font-size .25s ease;
+}
+.prose-ink p { margin: 0; text-indent: 1.5em; text-align: justify; }
+.prose-ink :is(h2, blockquote) + p, .prose-ink > p:first-child { text-indent: 0; }
+.prose-ink h2 {
+  margin: 1.5em 0 1.75em; text-align: center; font-weight: 400; font-size: 1.15em;
+  font-variant: all-small-caps; letter-spacing: .22em; color: var(--accent);
+}
+.prose-ink h2::after { content: "❦"; display: block; margin-top: .4em; font-size: .9em; letter-spacing: 0; opacity: .6; }
+.prose-ink h2 + p::first-letter {
+  float: left; font-size: 3.6em; line-height: .82; padding: .06em .08em 0 0; color: var(--accent); font-weight: 500;
+}
+.prose-ink blockquote { margin: 1em 1.5em; font-style: italic; }
+
+/* ── Ink layers (CSS Custom Highlight API) ─────────────────────────────────── */
+::highlight(wash-ochre)  { background-color: rgb(207 155 52 / .34); }
+::highlight(wash-rose)   { background-color: rgb(199 110 122 / .3); }
+::highlight(wash-sage)   { background-color: rgb(112 152 102 / .32); }
+::highlight(wash-indigo) { background-color: rgb(86 120 180 / .28); }
+::highlight(wash-lilac)  { background-color: rgb(150 116 186 / .28); }
+::highlight(squiggle-ochre)  { text-decoration: underline wavy rgb(207 155 52); text-decoration-thickness: 1.5px; }
+::highlight(squiggle-rose)   { text-decoration: underline wavy rgb(199 110 122); text-decoration-thickness: 1.5px; }
+::highlight(squiggle-sage)   { text-decoration: underline wavy rgb(112 152 102); text-decoration-thickness: 1.5px; }
+::highlight(squiggle-indigo) { text-decoration: underline wavy rgb(86 120 180); text-decoration-thickness: 1.5px; }
+::highlight(squiggle-lilac)  { text-decoration: underline wavy rgb(150 116 186); text-decoration-thickness: 1.5px; }
+::highlight(note-ochre)  { text-decoration: underline dotted rgb(207 155 52); text-decoration-thickness: 2px; }
+::highlight(note-rose)   { text-decoration: underline dotted rgb(199 110 122); text-decoration-thickness: 2px; }
+::highlight(note-sage)   { text-decoration: underline dotted rgb(112 152 102); text-decoration-thickness: 2px; }
+::highlight(note-indigo) { text-decoration: underline dotted rgb(86 120 180); text-decoration-thickness: 2px; }
+::highlight(note-lilac)  { text-decoration: underline dotted rgb(150 116 186); text-decoration-thickness: 2px; }
+::highlight(focus) { background-color: rgb(140 59 46 / .16); }
+
+/* ── Margin stationery ─────────────────────────────────────────────────────── */
+.slip {
+  position: absolute; inset-inline: 0; top: 0; opacity: 0;
+  background-color: var(--card); border-radius: 2px;
+  box-shadow: 0 1px 1px rgb(var(--shade) / .07), 0 6px 14px -4px rgb(var(--shade) / .16);
+}
+.slip[data-placed] { opacity: 1; transition: transform .45s cubic-bezier(.3, 1.2, .5, 1), opacity .3s ease, rotate .3s ease; }
+.slip:nth-child(odd) { rotate: -.6deg; }
+.slip:nth-child(even) { rotate: .5deg; }
+.slip:hover, .slip:focus-within { rotate: 0deg; z-index: 2; }
+/* washi tape: translucent ink strip with torn ends */
+.tape {
+  position: absolute; top: -7px; left: 50%; width: 52px; height: 15px; translate: -50% 0; rotate: -3deg;
+  background: rgb(var(--c) / .5);
+  clip-path: polygon(3% 0, 97% 4%, 100% 30%, 96% 55%, 100% 82%, 97% 100%, 2% 96%, 0 70%, 4% 45%, 0 18%);
+}
+.sticky {
+  background-color: color-mix(in oklab, rgb(var(--c)) 24%, var(--card));
+  background-image: linear-gradient(315deg, rgb(var(--shade) / .14) 0, var(--back) 10px, transparent 10px);
+}
+.bracket {
+  position: absolute; left: -1.6rem; width: 9px; pointer-events: none;
+  border: 2px solid rgb(var(--c) / .85); border-right: 0; border-radius: 6px 0 0 6px;
+}
+textarea.field-auto { field-sizing: content; }
+
+/* sticky tabs — translucent index tabs with vertical labels, stuck past the page edge */
+.tab {
+  writing-mode: vertical-rl; background: rgb(var(--c) / .62); color: var(--ink);
+  border-radius: 0 5px 5px 0; box-shadow: 1px 2px 4px rgb(var(--shade) / .14);
+  transition: translate .25s cubic-bezier(.3, 1.3, .5, 1);
+}
+.tab:hover, .tab:focus-visible { translate: 4px 0; }
+
+/* watercolor swatch blot */
+.blot {
+  background: radial-gradient(circle at 35% 30%, rgb(var(--c) / .55), rgb(var(--c) / .95) 70%);
+  border-radius: 46% 54% 50% 50% / 52% 46% 54% 48%;
+}
+
+/* ── Bookshelf ─────────────────────────────────────────────────────────────── */
+.shelf-cell { position: relative; padding: 2rem 1.25rem 1.5rem; }
+.shelf-cell::after {
+  content: ""; position: absolute; inset: auto 0 0; height: 14px;
+  background: linear-gradient(#7a5639, #553a26 60%, #3f2a1b);
+  box-shadow: 0 10px 14px -8px rgb(0 0 0 / .45), inset 0 1px 0 rgb(255 255 255 / .12);
+}
+.cloth {
+  background-color: var(--cloth);
+  background-image:
+    linear-gradient(90deg, rgb(0 0 0 / .38), rgb(255 255 255 / .1) 5%, rgb(0 0 0 / .16) 8%, transparent 13%),
+    repeating-linear-gradient(0deg, rgb(255 255 255 / .035) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgb(0 0 0 / .07) 0 1px, transparent 1px 3px);
+  border-radius: 2px 5px 5px 2px;
+  box-shadow: inset -2px 0 3px rgb(0 0 0 / .25), 0 12px 18px -10px rgb(0 0 0 / .55);
+}
+.foil {
+  background: linear-gradient(105deg, #8a6a2f, #ecd38f 38%, #b8913f 55%, #f5e6b0 70%, #9b7834);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 1px 0 rgb(0 0 0 / .45));
+}
+.ribbon { clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 7px), 0 100%); }
+
+/* Native popovers (customizer) — positioned under the toolbar */
+[popover].panel { inset: auto; top: 4.25rem; right: 1rem; margin: 0; }
+[popover].panel::backdrop { background: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}
