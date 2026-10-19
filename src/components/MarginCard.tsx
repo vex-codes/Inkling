@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback, memo } from 'react'
 import { Trash2, MessageSquarePlus, Highlighter, Spline, Brackets } from 'lucide-react'
 import { useStore } from '../store.ts'
 import { INKS, type Annotation, type Kind } from '../lib/db.ts'
@@ -6,6 +6,7 @@ import { ink } from './Page.tsx'
 
 interface Props {
   note: Annotation
+  isDisplaced?: boolean
   onHover: (id: string | null) => void
 }
 
@@ -16,11 +17,12 @@ const KIND_ICONS: Record<Kind, typeof Highlighter> = {
   note: MessageSquarePlus,
 }
 
-export function MarginCard({ note, onHover }: Props) {
+export const MarginCard = memo(function MarginCard({ note, isDisplaced, onHover }: Props) {
   const legend = useStore((s) => s.book?.legend)
   const focusId = useStore((s) => s.focusId)
   const { updateNote, removeNote } = useStore.getState()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const saveTimeoutRef = useRef<number>(0)
   const [isEditing, setIsEditing] = useState(false)
   const [comment, setComment] = useState(note.note)
 
@@ -34,12 +36,32 @@ export function MarginCard({ note, onHover }: Props) {
     setComment(note.note)
   }, [note.note])
 
-  const handleBlur = () => {
+  // Debounced auto-save (350ms) to eliminate typing lag
+  const handleCommentChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const next = e.target.value
+      setComment(next)
+      window.clearTimeout(saveTimeoutRef.current)
+      saveTimeoutRef.current = window.setTimeout(() => {
+        if (next !== note.note) {
+          updateNote(note.id, { note: next.trim() })
+        }
+      }, 350)
+    },
+    [note.id, note.note, updateNote],
+  )
+
+  const handleBlur = useCallback(() => {
     setIsEditing(false)
+    window.clearTimeout(saveTimeoutRef.current)
     if (comment !== note.note) {
       updateNote(note.id, { note: comment.trim() })
     }
-  }
+  }, [comment, note.id, note.note, updateNote])
+
+  useEffect(() => {
+    return () => window.clearTimeout(saveTimeoutRef.current)
+  }, [])
 
   const KindIcon = KIND_ICONS[note.kind]
   const isSticky = note.kind === 'note'
@@ -53,9 +75,9 @@ export function MarginCard({ note, onHover }: Props) {
       onMouseLeave={() => onHover(null)}
       onFocusCapture={() => onHover(note.id)}
       onBlurCapture={() => onHover(null)}
-      className={`slip grain relative p-3 text-xs border border-line ${
+      className={`slip grain relative p-3 text-xs border border-line will-change-transform ${
         isSticky ? 'sticky' : ''
-      }`}
+      } ${isDisplaced ? 'ring-1 ring-line/50' : ''}`}
     >
       <span className="tape" style={ink(note.color)} />
 
@@ -66,6 +88,11 @@ export function MarginCard({ note, onHover }: Props) {
           <span className="smallcaps truncate font-semibold tracking-wide text-[11px] text-ink">
             {label}
           </span>
+          {isDisplaced && (
+            <span className="rounded bg-line/60 px-1 font-mono text-[9px] text-soft" title="Stacked to prevent overlap">
+              adjusted
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1 opacity-40 hover:opacity-100 transition-opacity">
@@ -109,7 +136,7 @@ export function MarginCard({ note, onHover }: Props) {
         <textarea
           ref={textareaRef}
           value={comment}
-          onChange={(e) => setComment(e.target.value)}
+          onChange={handleCommentChange}
           onFocus={() => setIsEditing(true)}
           onBlur={handleBlur}
           placeholder="Jot down a fleeting thought..."
@@ -127,4 +154,4 @@ export function MarginCard({ note, onHover }: Props) {
       </div>
     </div>
   )
-}
+})

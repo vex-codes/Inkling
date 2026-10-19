@@ -7,19 +7,34 @@ import gatsby from './sample/gatsby-ch1.md?raw'
 
 type NewMark = Pick<Annotation, 'page' | 'start' | 'end' | 'quote' | 'kind' | 'color'>
 
+export interface DeletedStash {
+  book: Book
+  pages: string[]
+  notes: Annotation[]
+  timeoutId: number
+  expiresAt: number
+}
+
 interface State {
   ready: boolean
+  isSaving: boolean
   prefs: Prefs
   books: Book[]
   book: Book | null
   pages: string[]
   notes: Annotation[]
   drawer: boolean
-  focusId: string | null // card whose textarea should grab focus once mounted
+  focusId: string | null
+  deletedStash: DeletedStash | null
+  storageWarning: string | null
   init(): Promise<void>
   setPrefs(p: Partial<Prefs>): void
   addBook(file: File): Promise<void>
-  removeBook(id: string): Promise<void>
+  stageRemoveBook(id: string): Promise<void>
+  undoRemoveBook(): Promise<void>
+  commitRemoveBook(): Promise<void>
+  renameBook(id: string, title: string, author: string, year?: string): Promise<void>
+  reseedSample(): Promise<void>
   openBook(id: string): Promise<void>
   closeBook(): void
   updateBook(patch: Partial<Book>): void
@@ -30,41 +45,27 @@ interface State {
   updateNote(id: string, patch: Partial<Pick<Annotation, 'note' | 'color' | 'kind'>>): void
   removeNote(id: string): void
   toggleDrawer(open?: boolean): void
+  backupSanctuary(): Promise<string>
+  restoreSanctuary(jsonString: string): Promise<void>
 }
 
 const uid = () => crypto.randomUUID()
-// Writes are fire-and-forget after the optimistic state update; surface failures loudly.
-const persist = (p: Promise<unknown>) => p.catch((e) => console.error('[inkling] IndexedDB write failed', e))
-
-/** First launch: shelve Gatsby ch. 1 with a few worked annotations so the margin is alive immediately. */
-async function seedSample(): Promise<Book> {
-  const pages = paginate(mdToChapters(gatsby))
-  const book: Book = {
-    id: uid(), title: 'The Great Gatsby', author: 'F. Scott Fitzgerald', year: '1925', publisher: 'Charles Scribner’s Sons',
-    format: 'md', pageCount: pages.length, wordCount: pages.reduce((n, p) => n + countWords(p), 0), addedAt: Date.now(),
-    page: 0, dogears: [], flags: [{ id: uid(), page: 0, color: 'rose', label: 'Narrator' }], legend: { ...DEFAULT_LEGEND },
-  }
-  const seeds: [string, Kind, Ink, string][] = [
-    ['reserve all judgements', 'highlight', 'rose', 'Claims to withhold judgement — then judges everyone. Reliable narrator?'],
-    ['Gatsby, who represented everything for which I have an unaffected scorn', 'squiggle', 'indigo', 'Scorn and admiration in one breath.'],
-    ['beautiful little fool', 'note', 'lilac', 'Daisy’s wish for her daughter: irony, or despair about what women are allowed to be?'],
-    ['a single green light, minute and far away', 'highlight', 'ochre', 'First sighting of the green light. Track it!'],
-  ]
-  const notes: Annotation[] = []
-  for (const [phrase, kind, color, note] of seeds) {
-    const page = pages.findIndex((p) => findInHtml(p, phrase))
-    const at = page >= 0 && findInHtml(pages[page], phrase)
-    if (at) notes.push({ id: uid(), bookId: book.id, page, ...at, kind, color, note, createdAt: Date.now() + notes.length })
-  }
-  await db.transaction('rw', db.books, db.contents, db.annotations, async () => {
-    await db.books.put(book)
-    await db.contents.put({ id: book.id, pages })
-    await db.annotations.bulkPut(notes)
-  })
-  return book
-}
+const SEEDED_KEY = 'inkling_sample_seeded'
 
 export const useStore = create<State>()((set, get) => {
+  let saveTimer = 0
+
+  const signalSave = () => {
+    set({ isSaving: true })
+    window.clearTimeout(saveTimer)
+    saveTimer = window.setTimeout(() => set({ isSaving: false }), 450)
+  }
+
+  const persist = (p: Promise<unknown>) => {
+    signalSave()
+    return p.catch((e) => console.error('[inkling] IndexedDB write failed', e))
+  }
+
   const patchBook = (patch: Partial<Book>) => {
     const b = get().book
     if (!b) return
@@ -73,20 +74,94 @@ export const useStore = create<State>()((set, get) => {
     persist(db.books.update(b.id, patch))
   }
 
+  const seedSample = async (): Promise<Book> => {
+    const pages = paginate(mdToChapters(gatsby))
+    const book: Book = {
+      id: uid(),
+      title: 'The Great Gatsby',
+      author: 'F. Scott Fitzgerald',
+      year: '1925',
+      publisher: 'Charles Scribner’s Sons',
+      format: 'md',
+      pageCount: pages.length,
+      wordCount: pages.reduce((n, p) => n + countWords(p), 0),
+      addedAt: Date.now(),
+      page: 0,
+      dogears: [],
+      flags: [{ id: uid(), page: 0, color: 'rose', label: 'Narrator' }],
+      legend: { ...DEFAULT_LEGEND },
+    }
+    const seeds: [string, Kind, Ink, string][] = [
+      ['reserve all judgements', 'highlight', 'rose', 'Claims to withhold judgement — then judges everyone. Reliable narrator?'],
+      ['Gatsby, who represented everything for which I have an unaffected scorn', 'squiggle', 'indigo', 'Scorn and admiration in one breath.'],
+      ['beautiful little fool', 'note', 'lilac', 'Daisy’s wish for her daughter: irony, or despair about what women are allowed to be?'],
+      ['a single green light, minute and far away', 'highlight', 'ochre', 'First sighting of the green light. Track it!'],
+    ]
+    const notes: Annotation[] = []
+    for (const [phrase, kind, color, note] of seeds) {
+      const page = pages.findIndex((p) => findInHtml(p, phrase))
+      const at = page >= 0 && findInHtml(pages[page], phrase)
+      if (at) notes.push({ id: uid(), bookId: book.id, page, ...at, kind, color, note, createdAt: Date.now() + notes.length })
+    }
+    await db.transaction('rw', db.books, db.contents, db.annotations, async () => {
+      await db.books.put(book)
+      await db.contents.put({ id: book.id, pages })
+      await db.annotations.bulkPut(notes)
+    })
+    try {
+      localStorage.setItem(SEEDED_KEY, 'true')
+    } catch {
+      // ignore
+    }
+    return book
+  }
+
+  const checkStorageQuota = async () => {
+    try {
+      if (navigator.storage && navigator.storage.estimate) {
+        const est = await navigator.storage.estimate()
+        if (est.quota && est.usage) {
+          const pct = Math.round((est.usage / est.quota) * 100)
+          if (pct > 80) {
+            set({ storageWarning: `Browser storage is ${pct}% full. Consider exporting a sanctuary backup.` })
+          }
+        }
+      }
+    } catch {
+      // quota check is best-effort
+    }
+  }
+
   return {
-    ready: false, prefs: DEFAULT_PREFS, books: [], book: null, pages: [], notes: [], drawer: false, focusId: null,
+    ready: false,
+    isSaving: false,
+    prefs: DEFAULT_PREFS,
+    books: [],
+    book: null,
+    pages: [],
+    notes: [],
+    drawer: false,
+    focusId: null,
+    deletedStash: null,
+    storageWarning: null,
 
     async init() {
       const prefs = { ...DEFAULT_PREFS, ...(await db.prefs.get('reader')) }
       let books = await db.books.orderBy('addedAt').toArray()
-      if (!books.length) {
+      const alreadySeeded = localStorage.getItem(SEEDED_KEY)
+
+      if (!books.length && !alreadySeeded) {
         const sample = await seedSample()
         books = [sample]
         prefs.lastBook = sample.id
       }
+
       set({ prefs, books })
-      if (prefs.lastBook && books.some((b) => b.id === prefs.lastBook)) await get().openBook(prefs.lastBook)
+      if (prefs.lastBook && books.some((b) => b.id === prefs.lastBook)) {
+        await get().openBook(prefs.lastBook)
+      }
       set({ ready: true })
+      void checkStorageQuota()
     },
 
     setPrefs(p) {
@@ -96,28 +171,135 @@ export const useStore = create<State>()((set, get) => {
     },
 
     async addBook(file) {
+      signalSave()
       const { pages, ...meta } = await ingest(file)
-      const book: Book = { ...meta, id: uid(), addedAt: Date.now(), page: 0, dogears: [], flags: [], legend: { ...DEFAULT_LEGEND } }
+      const book: Book = {
+        ...meta,
+        id: uid(),
+        addedAt: Date.now(),
+        page: 0,
+        dogears: [],
+        flags: [],
+        legend: { ...DEFAULT_LEGEND },
+      }
       await db.transaction('rw', db.books, db.contents, async () => {
         await db.books.put(book)
         await db.contents.put({ id: book.id, pages })
       })
       set({ books: [...get().books, book] })
+      void checkStorageQuota()
     },
 
-    async removeBook(id) {
-      await db.transaction('rw', db.books, db.contents, db.annotations, async () => {
-        await db.books.delete(id)
-        await db.contents.delete(id)
-        await db.annotations.where('bookId').equals(id).delete()
-      })
+    async stageRemoveBook(id) {
+      // Commit any previously pending deletion first
+      if (get().deletedStash) {
+        await get().commitRemoveBook()
+      }
+
+      const book = get().books.find((b) => b.id === id) || (await db.books.get(id))
+      if (!book) return
+
+      const [content, notes] = await Promise.all([
+        db.contents.get(id),
+        db.annotations.where('bookId').equals(id).toArray(),
+      ])
+
+      // Close book if currently open
+      if (get().book?.id === id) {
+        get().closeBook()
+      }
+
+      // Optimistically remove from shelf
       set({ books: get().books.filter((b) => b.id !== id) })
+
+      const timeoutId = window.setTimeout(() => {
+        void get().commitRemoveBook()
+      }, 5000)
+
+      set({
+        deletedStash: {
+          book,
+          pages: content?.pages ?? [],
+          notes,
+          timeoutId,
+          expiresAt: Date.now() + 5000,
+        },
+      })
+    },
+
+    async undoRemoveBook() {
+      const stash = get().deletedStash
+      if (!stash) return
+
+      window.clearTimeout(stash.timeoutId)
+      const book = stash.book
+
+      // Check if it already exists or re-insert
+      const existing = await db.books.get(book.id)
+      if (!existing) {
+        await db.transaction('rw', db.books, db.contents, db.annotations, async () => {
+          await db.books.put(book)
+          await db.contents.put({ id: book.id, pages: stash.pages })
+          if (stash.notes.length) {
+            await db.annotations.bulkPut(stash.notes)
+          }
+        })
+      }
+
+      set({
+        books: [...get().books, book].sort((a, b) => a.addedAt - b.addedAt),
+        deletedStash: null,
+      })
+    },
+
+    async commitRemoveBook() {
+      const stash = get().deletedStash
+      if (!stash) return
+      window.clearTimeout(stash.timeoutId)
+      const targetId = stash.book.id
+
+      await db.transaction('rw', db.books, db.contents, db.annotations, async () => {
+        await db.books.delete(targetId)
+        await db.contents.delete(targetId)
+        await db.annotations.where('bookId').equals(targetId).delete()
+      })
+
+      set({ deletedStash: null })
+      if (get().prefs.lastBook === targetId) {
+        get().setPrefs({ lastBook: null })
+      }
+    },
+
+    async renameBook(id, title, author, year) {
+      const patch: Partial<Book> = { title: title.trim() }
+      if (author !== undefined) patch.author = author.trim()
+      if (year !== undefined) patch.year = year.trim()
+
+      set({
+        books: get().books.map((b) => (b.id === id ? { ...b, ...patch } : b)),
+        book: get().book?.id === id ? { ...get().book!, ...patch } : get().book,
+      })
+      persist(db.books.update(id, patch))
+    },
+
+    async reseedSample() {
+      const sample = await seedSample()
+      set({ books: [...get().books, sample] })
+      await get().openBook(sample.id)
     },
 
     async openBook(id) {
-      const [book, content, notes] = await Promise.all([db.books.get(id), db.contents.get(id), db.annotations.where('bookId').equals(id).toArray()])
+      const [book, content, notes] = await Promise.all([
+        db.books.get(id),
+        db.contents.get(id),
+        db.annotations.where('bookId').equals(id).toArray(),
+      ])
       if (!book || !content) return
-      set({ book: { ...book, legend: { ...DEFAULT_LEGEND, ...book.legend } }, pages: content.pages, notes })
+      set({
+        book: { ...book, legend: { ...DEFAULT_LEGEND, ...book.legend } },
+        pages: content.pages,
+        notes,
+      })
       get().setPrefs({ lastBook: id })
     },
 
@@ -135,7 +317,9 @@ export const useStore = create<State>()((set, get) => {
 
     saveFlag({ id, ...f }) {
       const flags = get().book?.flags ?? []
-      patchBook({ flags: id ? flags.map((x) => (x.id === id ? { id, ...f } : x)) : [...flags, { id: uid(), ...f }] })
+      patchBook({
+        flags: id ? flags.map((x) => (x.id === id ? { id, ...f } : x)) : [...flags, { id: uid(), ...f }],
+      })
     },
 
     removeFlag(id) {
@@ -163,6 +347,53 @@ export const useStore = create<State>()((set, get) => {
 
     toggleDrawer(open) {
       set({ drawer: open ?? !get().drawer })
+    },
+
+    async backupSanctuary() {
+      const [books, contents, annotations, prefs] = await Promise.all([
+        db.books.toArray(),
+        db.contents.toArray(),
+        db.annotations.toArray(),
+        db.prefs.get('reader'),
+      ])
+      const payload = {
+        version: '1.0.0',
+        exportedAt: new Date().toISOString(),
+        books,
+        contents,
+        annotations,
+        prefs: prefs ?? DEFAULT_PREFS,
+      }
+      return JSON.stringify(payload, null, 2)
+    },
+
+    async restoreSanctuary(jsonString: string) {
+      signalSave()
+      const data = JSON.parse(jsonString)
+      if (!Array.isArray(data.books) || !Array.isArray(data.contents)) {
+        throw new Error('Invalid sanctuary backup file.')
+      }
+      await db.transaction('rw', db.books, db.contents, db.annotations, db.prefs, async () => {
+        await db.books.clear()
+        await db.contents.clear()
+        await db.annotations.clear()
+        await db.books.bulkPut(data.books)
+        await db.contents.bulkPut(data.contents)
+        if (Array.isArray(data.annotations)) {
+          await db.annotations.bulkPut(data.annotations)
+        }
+        if (data.prefs) {
+          await db.prefs.put(data.prefs, 'reader')
+        }
+      })
+      const books = await db.books.orderBy('addedAt').toArray()
+      set({
+        books,
+        book: null,
+        pages: [],
+        notes: [],
+        prefs: data.prefs || DEFAULT_PREFS,
+      })
     },
   }
 })

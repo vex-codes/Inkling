@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { SlidersHorizontal, X, RotateCcw } from 'lucide-react'
+import { SlidersHorizontal, X, RotateCcw, Download, FileDown } from 'lucide-react'
 import { useStore } from '../store.ts'
 import { INKS, type Font, type Theme, DEFAULT_PREFS } from '../lib/db.ts'
 import { ink } from './Page.tsx'
@@ -222,6 +222,49 @@ export function Customizer() {
                 </div>
               </div>
             )}
+
+            {/* Sanctuary Data Management */}
+            <div className="border-t border-line pt-3">
+              <label className="smallcaps mb-2 block font-semibold text-soft">Data & Sanctuary</label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const json = await useStore.getState().backupSanctuary()
+                    const blob = new Blob([json], { type: 'application/json' })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `Inkling_Sanctuary_Backup_${new Date().toISOString().slice(0, 10)}.json`
+                    a.click()
+                    URL.revokeObjectURL(url)
+                  }}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded border border-line bg-paper/60 px-2.5 py-1.5 text-xs text-soft transition hover:bg-paper hover:text-ink"
+                  title="Export complete library backup"
+                >
+                  <Download size={13} />
+                  <span>Backup .json</span>
+                </button>
+
+                <label className="flex flex-1 items-center justify-center gap-1.5 rounded border border-line bg-paper/60 px-2.5 py-1.5 text-xs text-soft transition hover:bg-paper hover:text-ink cursor-pointer">
+                  <FileDown size={13} />
+                  <span>Restore</span>
+                  <input
+                    type="file"
+                    accept=".json,application/json"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0]
+                      if (f) {
+                        const txt = await f.text()
+                        await useStore.getState().restoreSanctuary(txt)
+                        setOpen(false)
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
           </div>
         </div>
       )}

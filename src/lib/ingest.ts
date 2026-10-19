@@ -16,13 +16,26 @@ export async function ingest(file: File): Promise<Ingested> {
   let format: Format, pages: string[]
   let meta: Partial<typeof base> = {}
 
+  if (!file || file.size === 0) {
+    throw new Error('This file is empty (0 bytes). Please select a valid document.')
+  }
+
   if (ext === 'epub' || ext === 'pdf') {
-    ({ pages, meta } = ext === 'epub' ? await fromEpub(file) : await fromPdf(file))
-    format = ext
+    try {
+      ({ pages, meta } = ext === 'epub' ? await fromEpub(file) : await fromPdf(file))
+      format = ext
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      throw new Error(`Failed to parse ${ext.toUpperCase()}: ${msg}`)
+    }
   } else if (ext === 'md' || ext === 'markdown' || ext === 'txt') {
-    pages = paginate(mdToChapters(await file.text()))
+    const raw = await file.text()
+    if (!raw.trim()) throw new Error('Document contains no text content.')
+    pages = paginate(mdToChapters(raw))
     format = ext === 'txt' ? 'txt' : 'md'
-  } else throw new Error(`Inkling can’t read .${ext ?? '?'} files yet — try EPUB, PDF, or Markdown.`)
+  } else {
+    throw new Error(`Inkling can’t read .${ext ?? '?'} files yet — try EPUB, PDF, or Markdown.`)
+  }
 
   if (!pages.length) throw new Error('No readable text found in this file.')
   const clean = Object.fromEntries(Object.entries(meta).filter(([, v]) => v?.trim()))

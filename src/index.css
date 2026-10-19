@@ -24,9 +24,10 @@
 /* Watercolor inks as RGB triplets so components can mix their own alpha: rgb(var(--c) / .3) */
 :root {
   --ochre: 207 155 52; --rose: 199 110 122; --sage: 112 152 102; --indigo: 86 120 180; --lilac: 150 116 186;
-  --margin-w: 200px;
+  --margin-w: 210px;
 }
-@media (max-width: 820px) { :root { --margin-w: 168px; } }
+@media (max-width: 1199px) { :root { --margin-w: 175px; } }
+@media (max-width: 768px) { :root { --margin-w: 135px; } }
 
 @theme inline {
   --color-paper: var(--paper);
@@ -125,6 +126,12 @@ body {
 ::highlight(note-indigo) { text-decoration: underline dotted rgb(86 120 180); text-decoration-thickness: 2px; }
 ::highlight(note-lilac)  { text-decoration: underline dotted rgb(150 116 186); text-decoration-thickness: 2px; }
 ::highlight(focus) { background-color: rgb(140 59 46 / .16); }
+
+[data-theme="midnight"] ::highlight(wash-ochre)  { background-color: rgb(207 155 52 / .45); }
+[data-theme="midnight"] ::highlight(wash-rose)   { background-color: rgb(199 110 122 / .42); }
+[data-theme="midnight"] ::highlight(wash-sage)   { background-color: rgb(112 152 102 / .42); }
+[data-theme="midnight"] ::highlight(wash-indigo) { background-color: rgb(86 120 180 / .4); }
+[data-theme="midnight"] ::highlight(wash-lilac)  { background-color: rgb(150 116 186 / .4); }
 
 /* ── Margin stationery ─────────────────────────────────────────────────────── */
 .slip {
