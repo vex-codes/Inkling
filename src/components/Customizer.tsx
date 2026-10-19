@@ -21,6 +21,11 @@ export const FONTS: Record<Font, { label: string; family: string; desc: string }
     family: '"Atkinson Hyperlegible", system-ui, sans-serif',
     desc: 'High-contrast accessible',
   },
+  libron: {
+    label: 'Libron',
+    family: '"Libron", Georgia, serif',
+    desc: 'Bespoke literary serif',
+  },
 }
 
 export const THEMES: { id: Theme; name: string; bg: string; ink: string }[] = [

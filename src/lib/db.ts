@@ -5,7 +5,7 @@ export type Ink = (typeof INKS)[number]
 export type Kind = 'highlight' | 'squiggle' | 'bracket' | 'note'
 export type Format = 'epub' | 'pdf' | 'md' | 'txt'
 export type Theme = 'cream' | 'parchment' | 'sage' | 'midnight'
-export type Font = 'garamond' | 'baskerville' | 'atkinson'
+export type Font = 'garamond' | 'baskerville' | 'atkinson' | 'libron'
 export type Style = 'mla' | 'apa' | 'chicago'
 
 export interface Flag { id: string; page: number; color: Ink; label: string }
