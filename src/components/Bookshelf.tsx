@@ -1,4 +1,5 @@
 import { useState, useRef, type DragEvent } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Plus,
   BookOpen,
@@ -401,76 +402,78 @@ export function Bookshelf() {
       </main>
 
       {/* Rename Book Modal */}
-      {editingBook && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs"
-          onClick={() => setEditingBook(null)}
-        >
+      {editingBook &&
+        createPortal(
           <div
-            className="grain w-full max-w-sm rounded-sm border border-line bg-card p-6 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs"
+            onClick={() => setEditingBook(null)}
           >
-            <div className="flex items-center justify-between border-b border-line pb-3 mb-4">
-              <h3 className="smallcaps text-base font-semibold">Book Details</h3>
-              <button
-                onClick={() => setEditingBook(null)}
-                className="p-1 text-soft hover:text-ink"
-                aria-label="Close dialog"
-              >
-                <X size={16} strokeWidth={1.5} />
-              </button>
-            </div>
-
-            <div className="space-y-3.5 text-xs">
-              <div>
-                <label className="smallcaps block text-soft mb-1">Title</label>
-                <input
-                  type="text"
-                  value={renameTitle}
-                  onChange={(e) => setRenameTitle(e.target.value)}
-                  className="w-full rounded-sm border border-line bg-paper px-3 py-2 font-serif text-sm text-ink outline-none focus:border-accent"
-                />
+            <div
+              className="grain w-full max-w-sm rounded-sm border border-line bg-card p-6 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-line pb-3 mb-4">
+                <h3 className="smallcaps text-base font-semibold">Book Details</h3>
+                <button
+                  onClick={() => setEditingBook(null)}
+                  className="p-1 text-soft hover:text-ink"
+                  aria-label="Close dialog"
+                >
+                  <X size={16} strokeWidth={1.5} />
+                </button>
               </div>
 
-              <div>
-                <label className="smallcaps block text-soft mb-1">Author</label>
-                <input
-                  type="text"
-                  value={renameAuthor}
-                  onChange={(e) => setRenameAuthor(e.target.value)}
-                  className="w-full rounded-sm border border-line bg-paper px-3 py-2 font-serif text-sm text-ink outline-none focus:border-accent"
-                />
+              <div className="space-y-3.5 text-xs">
+                <div>
+                  <label className="smallcaps block text-soft mb-1">Title</label>
+                  <input
+                    type="text"
+                    value={renameTitle}
+                    onChange={(e) => setRenameTitle(e.target.value)}
+                    className="w-full rounded-sm border border-line bg-paper px-3 py-2 font-serif text-sm text-ink outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div>
+                  <label className="smallcaps block text-soft mb-1">Author</label>
+                  <input
+                    type="text"
+                    value={renameAuthor}
+                    onChange={(e) => setRenameAuthor(e.target.value)}
+                    className="w-full rounded-sm border border-line bg-paper px-3 py-2 font-serif text-sm text-ink outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div>
+                  <label className="smallcaps block text-soft mb-1">Publication Year</label>
+                  <input
+                    type="text"
+                    value={renameYear}
+                    onChange={(e) => setRenameYear(e.target.value)}
+                    placeholder="e.g. 1925"
+                    className="w-full rounded-sm border border-line bg-paper px-3 py-2 font-sans text-xs text-ink outline-none focus:border-accent"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="smallcaps block text-soft mb-1">Publication Year</label>
-                <input
-                  type="text"
-                  value={renameYear}
-                  onChange={(e) => setRenameYear(e.target.value)}
-                  placeholder="e.g. 1925"
-                  className="w-full rounded-sm border border-line bg-paper px-3 py-2 font-sans text-xs text-ink outline-none focus:border-accent"
-                />
+              <div className="mt-6 flex justify-end gap-2.5">
+                <button
+                  onClick={() => setEditingBook(null)}
+                  className="rounded-sm px-4 py-2 text-xs text-soft hover:text-ink transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => void handleSaveRename()}
+                  className="rounded-sm bg-ink px-4 py-2 font-serif text-xs text-paper shadow-xs hover:opacity-90 transition"
+                >
+                  Save Details
+                </button>
               </div>
             </div>
-
-            <div className="mt-6 flex justify-end gap-2.5">
-              <button
-                onClick={() => setEditingBook(null)}
-                className="rounded-sm px-4 py-2 text-xs text-soft hover:text-ink transition"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => void handleSaveRename()}
-                className="rounded-sm bg-ink px-4 py-2 font-serif text-xs text-paper shadow-xs hover:opacity-90 transition"
-              >
-                Save Details
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
 
       {/* Drag & Drop Overlay */}
       {isDragging && (

@@ -16,11 +16,11 @@ interface ThreadLine {
   isHovered: boolean
 }
 
-/** True while the page is within ~half a screen of the viewport. Off-screen pages skip all heavy anchor work. */
+/** True while page is within overscan buffer (250% = +-2 to 3 surrounding pages). Off-screen pages abort heavy anchor work. */
 function useNear(ref: RefObject<HTMLElement | null>) {
   const [near, setNear] = useState(false)
   useEffect(() => {
-    const io = new IntersectionObserver(([e]) => setNear(e.isIntersecting), { rootMargin: '60% 0px' })
+    const io = new IntersectionObserver(([e]) => setNear(e.isIntersecting), { rootMargin: '250% 0px' })
     if (ref.current) io.observe(ref.current)
     return () => io.disconnect()
   }, [ref])
@@ -77,10 +77,12 @@ export const Page = memo(function Page({ index, html }: { index: number; html: s
     }
   }, [anchorSignature, near, sorted])
 
-  // 2 · Living margin layout with requestAnimationFrame batching
+  // 2 · Living margin layout with requestAnimationFrame batching & Abort guard
   const scheduleLayout = useCallback(() => {
     cancelAnimationFrame(rafRef.current)
+    if (!near) return
     rafRef.current = requestAnimationFrame(() => {
+      if (!near) return
       const text = textRef.current
       const margin = marginRef.current
       const sheet = sheetRef.current
@@ -178,6 +180,41 @@ export const Page = memo(function Page({ index, html }: { index: number; html: s
       focus?.delete(r)
     }
   }, [hover, sorted])
+
+  // Abort heavy vector/annotation parsing when page leaves near buffer
+  useEffect(() => {
+    if (!near) {
+      cancelAnimationFrame(rafRef.current)
+      setThreads([])
+      setDisplacedIds(new Set())
+    }
+  }, [near])
+
+  // Instant Fallback Skeleton: If page html is not yet ready, display warm parchment skeleton
+  if (!html) {
+    return (
+      <div ref={wrapRef} data-page={index} className="sheet-wrap reader-page-container w-full scroll-mt-20">
+        <div className="relative mx-auto w-fit max-w-full">
+          <article className="sheet grain sanctuary-page-skeleton animate-pulse rounded-sm p-12 min-h-[720px] flex flex-col justify-between">
+            <div className="space-y-4 pt-10 max-w-xl mx-auto w-full">
+              <div className="h-4 w-1/3 rounded-sm bg-line/40 mx-auto mb-10" />
+              <div className="h-3 w-full rounded-sm bg-line/30" />
+              <div className="h-3 w-11/12 rounded-sm bg-line/30" />
+              <div className="h-3 w-full rounded-sm bg-line/30" />
+              <div className="h-3 w-4/5 rounded-sm bg-line/30" />
+              <div className="h-3 w-full rounded-sm bg-line/30" />
+              <div className="h-3 w-5/6 rounded-sm bg-line/30" />
+              <div className="h-3 w-full rounded-sm bg-line/30" />
+              <div className="h-3 w-3/4 rounded-sm bg-line/30" />
+            </div>
+            <footer className="smallcaps text-center text-xs text-soft/50 font-serif italic pb-4">
+              ❦ Leaf {index + 1} binding ❦
+            </footer>
+          </article>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div ref={wrapRef} data-page={index} className="sheet-wrap reader-page-container w-full scroll-mt-20">

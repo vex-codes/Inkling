@@ -62,8 +62,8 @@ export function SelectionPopover() {
       }
 
       const rect = range.getBoundingClientRect()
-      // Smart flipping: if selection is near top of viewport (<110px), flip below
-      const flipBelow = rect.top < 110
+      // Smart boundary detection: if selection is within 60px of viewport top, flip below selection
+      const flipBelow = rect.top < 60
       const y = flipBelow ? rect.bottom + 10 : rect.top - 10
 
       setTarget({
@@ -132,8 +132,10 @@ export function SelectionPopover() {
     applyAnnotation(selectedKind, color, target)
   }
 
-  // Calculate clamped coordinates so it doesn't clip screen edges
-  const left = Math.max(160, Math.min(window.innerWidth - 160, target.x))
+  // Clamp horizontal coordinates to viewport bounds (16px safe gutter)
+  const popoverWidth = 360
+  const half = popoverWidth / 2
+  const left = Math.max(16 + half, Math.min(window.innerWidth - half - 16, target.x))
   const top = target.y
 
   return (

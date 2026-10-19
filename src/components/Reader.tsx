@@ -22,16 +22,11 @@ export function Reader() {
   const drawer = useStore((s) => s.drawer)
   const isSaving = useStore((s) => s.isSaving)
   const focusMode = useStore((s) => s.focusMode)
-  const isFastScrolling = useStore((s) => s.isFastScrolling)
-  const { closeBook, toggleDrawer, updateBook, toggleFocusMode, setFastScrolling } = useStore.getState()
+  const { closeBook, toggleDrawer, toggleFocusMode } = useStore.getState()
 
-  const [current, setCurrent] = useState(book.page)
+  const [current] = useState(book.page)
   const currentRef = useRef(book.page)
   const lastTurnTimeRef = useRef(0)
-
-  const lastScrollYRef = useRef(0)
-  const lastScrollTimeRef = useRef(performance.now())
-  const scrollStopTimerRef = useRef<number>(0)
 
   // Reopen where the reader left off
   useEffect(() => {
@@ -39,52 +34,6 @@ export function Reader() {
       goToPage(currentRef.current, 'instant')
     }
   }, [book.id])
-
-  // Track page & calculate scroll velocity (Flight Mode decoupling)
-  useEffect(() => {
-    let raf = 0
-    let savePageTimer = 0
-
-    const onScroll = () => {
-      const now = performance.now()
-      const dt = now - lastScrollTimeRef.current
-      const dy = Math.abs(window.scrollY - lastScrollYRef.current)
-
-      // If scrolling faster than 1.2 px/ms, activate flight mode
-      if (dt > 16) {
-        const velocity = dy / dt
-        if (velocity >= 1.2) {
-          setFastScrolling(true)
-        }
-        lastScrollYRef.current = window.scrollY
-        lastScrollTimeRef.current = now
-      }
-
-      window.clearTimeout(scrollStopTimerRef.current)
-      scrollStopTimerRef.current = window.setTimeout(() => {
-        setFastScrolling(false)
-      }, 120)
-
-      cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(() => {
-        const el = document.elementFromPoint(innerWidth / 2, innerHeight * 0.35)?.closest<HTMLElement>('[data-page]')
-        const p = el ? Number(el.dataset.page) : currentRef.current
-        if (p === currentRef.current) return
-        currentRef.current = p
-        setCurrent(p)
-        clearTimeout(savePageTimer)
-        savePageTimer = window.setTimeout(() => updateBook({ page: p }), 500)
-      })
-    }
-
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => {
-      window.removeEventListener('scroll', onScroll)
-      cancelAnimationFrame(raf)
-      clearTimeout(savePageTimer)
-      window.clearTimeout(scrollStopTimerRef.current)
-    }
-  }, [setFastScrolling, updateBook])
 
   // Keyboard navigation: ⌘J quotebook · J/K / Arrows page turn · F Focus mode · Esc
   useEffect(() => {
@@ -150,7 +99,7 @@ export function Reader() {
       }}
       className={`min-h-dvh transition-all duration-300 ${
         focusMode ? 'focus-mode-active' : ''
-      } ${isFastScrolling ? 'flight-mode' : ''}`}
+      }`}
     >
       {/* Sticky Header Bar */}
       <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-paper/85 px-4 py-2.5 backdrop-blur-md transition-all duration-300 sm:px-6">
@@ -167,7 +116,7 @@ export function Reader() {
           <h1 className="truncate text-base italic leading-tight font-serif">{book.title}</h1>
           <div className="flex items-center justify-center gap-2 text-[12px] text-soft">
             <span className="smallcaps truncate">
-              {book.author || 'Unknown author'} · page {current + 1} of {pages.length}
+              {book.author || 'Unknown author'} · page <span id="header-current-page">{current + 1}</span> of {pages.length}
             </span>
             {isSaving && (
               <span className="flex items-center gap-1 text-[11px] text-accent animate-pulse" title="Saving thought to browser storage">
@@ -231,8 +180,8 @@ export function Reader() {
         </button>
       )}
 
-      {/* Bottom Reading Ribbon Scrubber with HUD Pill */}
-      <ReadingScrubber totalPages={pages.length} currentPage={current} pagesHtml={pages} />
+      {/* Bottom Reading Ribbon Scrubber with HUD Pill (Direct DOM Zero Re-render) */}
+      <ReadingScrubber totalPages={pages.length} initialPage={current} pagesHtml={pages} />
 
       <SelectionPopover />
       <Quotebook />

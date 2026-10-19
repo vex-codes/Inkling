@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Copy, Check, Download, Search, MessageSquareQuote, FileText, Sparkles } from 'lucide-react'
 import { useStore } from '../store.ts'
 import { INKS, type Ink, type Style } from '../lib/db.ts'
@@ -78,7 +79,7 @@ export function Quotebook() {
       <aside
         role="complementary"
         aria-label="Quotebook & Academic Synthesis"
-        className="grain fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-line bg-card shadow-2xl transition-transform duration-300 ease-in-out sm:w-[26rem]"
+        className="grain fixed inset-y-0 right-0 z-40 flex w-full max-w-[min(480px,90vw)] min-h-dvh flex-col border-l border-line bg-card shadow-2xl transition-transform duration-300 ease-in-out"
       >
         {/* Header (p-6 standard) */}
         <div className="flex items-center justify-between border-b border-line px-6 py-4">
@@ -275,62 +276,64 @@ export function Quotebook() {
       </aside>
 
       {/* Export Preview Modal */}
-      {showExportModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs"
-          onClick={() => setShowExportModal(false)}
-        >
+      {showExportModal &&
+        createPortal(
           <div
-            className="grain w-full max-w-2xl rounded-sm border border-line bg-card p-6 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs"
+            onClick={() => setShowExportModal(false)}
           >
-            <div className="flex items-center justify-between border-b border-line pb-3 mb-4">
-              <div className="flex items-center gap-2">
-                <Sparkles size={18} strokeWidth={1.5} className="text-accent" />
-                <h3 className="smallcaps text-base font-semibold">Markdown / Obsidian Export Preview</h3>
-              </div>
-              <button
-                onClick={() => setShowExportModal(false)}
-                className="p-1 text-soft hover:text-ink"
-                aria-label="Close export preview"
-              >
-                <X size={16} strokeWidth={1.5} />
-              </button>
-            </div>
-
-            <p className="font-serif italic text-xs text-soft mb-3">
-              Formatted study guide with live citations, marginalia thoughts, and thematic tags ready for Obsidian or your notes app:
-            </p>
-
-            <pre className="max-h-80 overflow-y-auto rounded-sm border border-line bg-paper/60 p-4 font-mono text-[11px] leading-relaxed text-ink select-all whitespace-pre-wrap">
-              {exportMarkdown}
-            </pre>
-
-            <div className="mt-5 flex items-center justify-between gap-3 border-t border-line pt-4">
-              <span className="text-[11px] text-soft">
-                {notes.length} annotations formatted in {activeStyle.toUpperCase()}
-              </span>
-
-              <div className="flex items-center gap-2">
+            <div
+              className="grain w-full max-w-2xl rounded-sm border border-line bg-card p-6 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-line pb-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={18} strokeWidth={1.5} className="text-accent" />
+                  <h3 className="smallcaps text-base font-semibold">Markdown / Obsidian Export Preview</h3>
+                </div>
                 <button
-                  onClick={handleCopyExportMarkdown}
-                  className="flex items-center gap-1.5 rounded-sm border border-line px-4 py-2 font-serif text-xs text-ink hover:bg-paper transition"
+                  onClick={() => setShowExportModal(false)}
+                  className="p-1 text-soft hover:text-ink"
+                  aria-label="Close export preview"
                 >
-                  {copiedExport ? <Check size={14} strokeWidth={1.5} className="text-green-600" /> : <Copy size={14} strokeWidth={1.5} />}
-                  <span>{copiedExport ? 'Copied to Clipboard' : 'Copy to Clipboard'}</span>
-                </button>
-                <button
-                  onClick={handleDownloadMarkdown}
-                  className="flex items-center gap-1.5 rounded-sm bg-ink px-4 py-2 font-serif text-xs text-paper shadow-xs hover:opacity-90 transition"
-                >
-                  <Download size={14} strokeWidth={1.5} />
-                  <span>Download .md</span>
+                  <X size={16} strokeWidth={1.5} />
                 </button>
               </div>
+
+              <p className="font-serif italic text-xs text-soft mb-3">
+                Formatted study guide with live citations, marginalia thoughts, and thematic tags ready for Obsidian or your notes app:
+              </p>
+
+              <pre className="max-h-80 overflow-y-auto rounded-sm border border-line bg-paper/60 p-4 font-mono text-[11px] leading-relaxed text-ink select-all whitespace-pre-wrap">
+                {exportMarkdown}
+              </pre>
+
+              <div className="mt-5 flex items-center justify-between gap-3 border-t border-line pt-4">
+                <span className="text-[11px] text-soft">
+                  {notes.length} annotations formatted in {activeStyle.toUpperCase()}
+                </span>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleCopyExportMarkdown}
+                    className="flex items-center gap-1.5 rounded-sm border border-line px-4 py-2 font-serif text-xs text-ink hover:bg-paper transition"
+                  >
+                    {copiedExport ? <Check size={14} strokeWidth={1.5} className="text-green-600" /> : <Copy size={14} strokeWidth={1.5} />}
+                    <span>{copiedExport ? 'Copied to Clipboard' : 'Copy to Clipboard'}</span>
+                  </button>
+                  <button
+                    onClick={handleDownloadMarkdown}
+                    className="flex items-center gap-1.5 rounded-sm bg-ink px-4 py-2 font-serif text-xs text-paper shadow-xs hover:opacity-90 transition"
+                  >
+                    <Download size={14} strokeWidth={1.5} />
+                    <span>Download .md</span>
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </>
   )
 }
