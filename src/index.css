@@ -66,11 +66,15 @@ body {
    drop-shadow so it follows the clipped silhouette. */
 @property --fold { syntax: "<length>"; inherits: true; initial-value: 0px; }
 
+.reader-page-container {
+  contain: layout style paint;
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 850px;
+}
+
 .sheet-wrap {
   padding-inline: 2.5rem; /* room for sticky tabs past the paper edge */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 1200px;
-  filter: drop-shadow(0 1px 1px rgb(var(--shade) / .08)) drop-shadow(0 14px 22px rgb(var(--shade) / .11));
+  filter: drop-shadow(0 1px 2px rgb(var(--shade) / .06)) drop-shadow(0 12px 24px rgb(var(--shade) / .09));
 }
 [data-theme="midnight"] .sheet-wrap { filter: drop-shadow(0 0 1px rgb(216 210 196 / .14)) drop-shadow(0 14px 26px rgb(0 0 0 / .55)); }
 
@@ -78,7 +82,7 @@ body {
   --fold: 0px;
   position: relative;
   background-color: var(--paper);
-  background-image: linear-gradient(90deg, rgb(var(--shade) / .06), transparent 2.5rem);
+  background-image: linear-gradient(90deg, rgb(var(--shade) / .05), transparent 2.5rem);
   clip-path: polygon(0 0, calc(100% - var(--fold)) 0, 100% var(--fold), 100% 100%, 0 100%);
   transition: --fold .5s cubic-bezier(.34, 1.4, .5, 1), background-color .5s ease;
 }
@@ -93,7 +97,7 @@ body {
 /* ── Prose ─────────────────────────────────────────────────────────────────── */
 .prose-ink {
   font-family: var(--read-font); font-size: var(--read-size); line-height: var(--read-leading);
-  width: calc(var(--read-measure) * 1ch); max-width: 100%;
+  width: calc(var(--read-measure) * 1ch); max-width: 720px;
   hyphens: auto; text-wrap: pretty; font-variant-numeric: oldstyle-nums; font-kerning: normal;
   transition: font-size .25s ease;
 }
@@ -136,13 +140,47 @@ body {
 /* ── Margin stationery ─────────────────────────────────────────────────────── */
 .slip {
   position: absolute; inset-inline: 0; top: 0; opacity: 0;
-  background-color: var(--card); border-radius: 2px;
-  box-shadow: 0 1px 1px rgb(var(--shade) / .07), 0 6px 14px -4px rgb(var(--shade) / .16);
+  background-color: var(--card); border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(43, 37, 35, 0.04), 0 4px 12px rgba(43, 37, 35, 0.03);
+  transform: translate3d(0, var(--target-y, 0px), 0);
+  will-change: transform;
 }
-.slip[data-placed] { opacity: 1; transition: transform .45s cubic-bezier(.3, 1.2, .5, 1), opacity .3s ease, rotate .3s ease; }
+.slip[data-placed] { opacity: 1; transition: transform .45s cubic-bezier(0.16, 1, 0.3, 1), opacity .3s ease, rotate .3s ease; }
 .slip:nth-child(odd) { rotate: -.6deg; }
 .slip:nth-child(even) { rotate: .5deg; }
 .slip:hover, .slip:focus-within { rotate: 0deg; z-index: 2; }
+
+/* Flight Mode (Fast-Scroll Decoupling) */
+.flight-mode .threads-svg {
+  opacity: 0 !important;
+  transition: opacity 100ms ease-out !important;
+  pointer-events: none;
+}
+.flight-mode .slip {
+  pointer-events: none;
+}
+
+/* Focus Mode (Pure Centered Reading Column) */
+.focus-mode-active header {
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+}
+.focus-mode-active .living-margin-col {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(12px);
+  transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.focus-mode-active .sheet-flags,
+.focus-mode-active .dogear,
+.focus-mode-active .flag-btn {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity 0.3s ease;
+}
+
 /* washi tape: translucent ink strip with torn ends */
 .tape {
   position: absolute; top: -7px; left: 50%; width: 52px; height: 15px; translate: -50% 0; rotate: -3deg;

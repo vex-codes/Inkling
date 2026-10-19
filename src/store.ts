@@ -25,10 +25,14 @@ interface State {
   notes: Annotation[]
   drawer: boolean
   focusId: string | null
+  focusMode: boolean
+  isFastScrolling: boolean
   deletedStash: DeletedStash | null
   storageWarning: string | null
   init(): Promise<void>
   setPrefs(p: Partial<Prefs>): void
+  setFastScrolling(active: boolean): void
+  toggleFocusMode(on?: boolean): void
   addBook(file: File): Promise<void>
   stageRemoveBook(id: string): Promise<void>
   undoRemoveBook(): Promise<void>
@@ -142,6 +146,8 @@ export const useStore = create<State>()((set, get) => {
     notes: [],
     drawer: false,
     focusId: null,
+    focusMode: false,
+    isFastScrolling: false,
     deletedStash: null,
     storageWarning: null,
 
@@ -347,6 +353,16 @@ export const useStore = create<State>()((set, get) => {
 
     toggleDrawer(open) {
       set({ drawer: open ?? !get().drawer })
+    },
+
+    setFastScrolling(isFastScrolling) {
+      if (get().isFastScrolling !== isFastScrolling) {
+        set({ isFastScrolling })
+      }
+    },
+
+    toggleFocusMode(on) {
+      set({ focusMode: on ?? !get().focusMode })
     },
 
     async backupSanctuary() {

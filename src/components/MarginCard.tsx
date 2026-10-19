@@ -75,16 +75,16 @@ export const MarginCard = memo(function MarginCard({ note, isDisplaced, onHover 
       onMouseLeave={() => onHover(null)}
       onFocusCapture={() => onHover(note.id)}
       onBlurCapture={() => onHover(null)}
-      className={`slip grain relative p-3 text-xs border border-line will-change-transform ${
+      className={`slip grain relative p-3.5 text-xs border border-line flex flex-col gap-2.5 will-change-transform ${
         isSticky ? 'sticky' : ''
       } ${isDisplaced ? 'ring-1 ring-line/50' : ''}`}
     >
       <span className="tape" style={ink(note.color)} />
 
       {/* Header: Type icon, legend label, color dots, delete */}
-      <div className="flex items-center justify-between border-b border-line/60 pb-1.5 mb-2 text-soft">
+      <div className="flex items-center justify-between border-b border-line/60 pb-2 text-soft">
         <div className="flex items-center gap-1.5 min-w-0">
-          <KindIcon size={12} strokeWidth={2} style={{ color: `rgb(var(--${note.color}))` }} />
+          <KindIcon size={13} strokeWidth={1.5} style={{ color: `rgb(var(--${note.color}))` }} />
           <span className="smallcaps truncate font-semibold tracking-wide text-[11px] text-ink">
             {label}
           </span>
@@ -119,14 +119,14 @@ export const MarginCard = memo(function MarginCard({ note, isDisplaced, onHover 
             title="Erase margin card"
             aria-label="Delete margin note"
           >
-            <Trash2 size={12} />
+            <Trash2 size={13} strokeWidth={1.5} />
           </button>
         </div>
       </div>
 
       {/* Annotated passage snippet (if not just a pure sticky) */}
       {note.kind !== 'note' && (
-        <blockquote className="mb-2 line-clamp-3 italic text-soft font-serif text-[11px] border-l-2 pl-2 border-line/80">
+        <blockquote className="line-clamp-3 italic text-soft font-serif text-[11px] border-l-2 pl-2.5 border-line/80 my-0.5">
           “{note.quote}”
         </blockquote>
       )}
@@ -146,7 +146,7 @@ export const MarginCard = memo(function MarginCard({ note, isDisplaced, onHover 
       </div>
 
       {/* Footer metadata */}
-      <div className="mt-1 flex items-center justify-between text-[10px] text-soft/70">
+      <div className="pt-1 flex items-center justify-between text-[10px] text-soft/70 border-t border-line/30">
         <span className="font-sans">
           {new Date(note.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </span>

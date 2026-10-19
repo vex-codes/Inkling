@@ -148,46 +148,46 @@ export function SelectionPopover() {
         {/* Kind Selectors */}
         <button
           onClick={() => setSelectedKind('highlight')}
-          className={`flex items-center gap-1 rounded px-1.5 py-1 text-xs transition ${
+          className={`flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-xs transition ${
             selectedKind === 'highlight' ? 'bg-line text-ink font-semibold' : 'text-soft hover:text-ink'
           }`}
           title="Watercolor Highlight (Press H)"
         >
-          <Highlighter size={13} />
+          <Highlighter size={13} strokeWidth={1.5} />
           <span className="smallcaps text-[11px]">Highlight</span>
           <kbd className="font-sans text-[9px] opacity-60 ml-0.5">H</kbd>
         </button>
 
         <button
           onClick={() => setSelectedKind('squiggle')}
-          className={`flex items-center gap-1 rounded px-1.5 py-1 text-xs transition ${
+          className={`flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-xs transition ${
             selectedKind === 'squiggle' ? 'bg-line text-ink font-semibold' : 'text-soft hover:text-ink'
           }`}
           title="Squiggle Underline"
         >
-          <Spline size={13} />
+          <Spline size={13} strokeWidth={1.5} />
           <span className="smallcaps text-[11px]">Squiggle</span>
         </button>
 
         <button
           onClick={() => setSelectedKind('bracket')}
-          className={`flex items-center gap-1 rounded px-1.5 py-1 text-xs transition ${
+          className={`flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-xs transition ${
             selectedKind === 'bracket' ? 'bg-line text-ink font-semibold' : 'text-soft hover:text-ink'
           }`}
           title="Margin Bracket"
         >
-          <Brackets size={13} />
+          <Brackets size={13} strokeWidth={1.5} />
           <span className="smallcaps text-[11px]">Bracket</span>
         </button>
 
         <button
           onClick={() => setSelectedKind('note')}
-          className={`flex items-center gap-1 rounded px-1.5 py-1 text-xs transition ${
+          className={`flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-xs transition ${
             selectedKind === 'note' ? 'bg-line text-ink font-semibold' : 'text-soft hover:text-ink'
           }`}
           title="Margin Sticky Note (Press N)"
         >
-          <StickyNote size={13} />
+          <StickyNote size={13} strokeWidth={1.5} />
           <span className="smallcaps text-[11px]">Note</span>
           <kbd className="font-sans text-[9px] opacity-60 ml-0.5">N</kbd>
         </button>

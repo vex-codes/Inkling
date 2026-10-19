@@ -109,7 +109,8 @@ export const Page = memo(function Page({ index, html }: { index: number; html: s
         const id = el.dataset.card!
         const finalTop = tops[i]
         const origTop = items[i].desiredTop
-        el.style.transform = `translateY(${finalTop}px)`
+        el.style.transform = `translate3d(0, ${finalTop}px, 0)`
+        el.style.willChange = 'transform'
         el.dataset.placed = 'true'
 
         // Detect collision displacement
@@ -179,16 +180,16 @@ export const Page = memo(function Page({ index, html }: { index: number; html: s
   }, [hover, sorted])
 
   return (
-    <div ref={wrapRef} data-page={index} className="sheet-wrap w-full scroll-mt-20">
+    <div ref={wrapRef} data-page={index} className="sheet-wrap reader-page-container w-full scroll-mt-20">
       <div className="relative mx-auto w-fit max-w-full">
         <article ref={sheetRef} data-folded={folded} aria-label={`Page ${index + 1}`} className="sheet grain">
           <div className="flex h-14 items-end px-6">
             <button
               onClick={() => setEditing(editing ? null : 'new')}
-              className="flex items-center gap-1.5 rounded px-2 py-1 text-sm text-soft opacity-0 transition hover:bg-line focus-visible:opacity-100 [@media(hover:none)]:opacity-100 [.sheet:hover_&]:opacity-100"
+              className="flag-btn flex items-center gap-1.5 rounded-sm px-2.5 py-1 text-xs text-soft opacity-0 transition hover:bg-line focus-visible:opacity-100 [@media(hover:none)]:opacity-100 [.sheet:hover_&]:opacity-100"
               aria-expanded={editing === 'new'}
             >
-              <FlagIcon size={14} strokeWidth={1.6} /> <span className="smallcaps">flag page</span>
+              <FlagIcon size={14} strokeWidth={1.5} /> <span className="smallcaps">flag page</span>
             </button>
           </div>
 
@@ -201,7 +202,7 @@ export const Page = memo(function Page({ index, html }: { index: number; html: s
                   .map((n) => <span key={n.id} data-bracket={n.id} className="bracket" style={ink(n.color)} />)}
             </div>
 
-            <aside ref={marginRef} aria-label={`Margin notes, page ${index + 1}`} className="relative">
+            <aside ref={marginRef} aria-label={`Margin notes, page ${index + 1}`} className="living-margin-col relative">
               {near &&
                 sorted.map((n) => (
                   <MarginCard
@@ -211,6 +212,16 @@ export const Page = memo(function Page({ index, html }: { index: number; html: s
                     onHover={setHover}
                   />
                 ))}
+
+              {/* Empty State Delight: Guideline & Watermark Prompt */}
+              {sorted.length === 0 && (
+                <div className="empty-margin-watermark pointer-events-none select-none flex h-full min-h-[220px] flex-col justify-start pt-8 text-center opacity-30 transition-opacity duration-300">
+                  <div className="mx-auto h-16 w-px border-r border-dashed border-line/80" />
+                  <p className="mt-3 font-serif text-[11px] italic tracking-wide text-soft leading-relaxed px-1">
+                    Select text or press <kbd className="font-mono text-[9px] uppercase font-bold border border-line px-1 py-0.5 rounded bg-paper/50">H</kbd> to highlight, <kbd className="font-mono text-[9px] uppercase font-bold border border-line px-1 py-0.5 rounded bg-paper/50">N</kbd> to jot a thought.
+                  </p>
+                </div>
+              )}
             </aside>
           </div>
 
@@ -225,9 +236,9 @@ export const Page = memo(function Page({ index, html }: { index: number; html: s
           />
           <span className="flap" />
 
-          {/* SVG Thread Lines for Hover & Collisions */}
+          {/* SVG Thread Lines for Hover & Collisions (hidden instantly in flight-mode) */}
           {threads.length > 0 && (
-            <svg className="pointer-events-none absolute inset-0 size-full overflow-visible" aria-hidden>
+            <svg className="threads-svg pointer-events-none absolute inset-0 size-full overflow-visible" aria-hidden>
               {threads.map((t) => (
                 <path
                   key={t.id}
@@ -253,7 +264,7 @@ export const Page = memo(function Page({ index, html }: { index: number; html: s
         </article>
 
         {/* Outer Sticky Tabs */}
-        <div className="absolute left-full top-20 flex flex-col gap-2">
+        <div className="sheet-flags absolute left-full top-20 flex flex-col gap-2">
           {flags.map((f) => (
             <button
               key={f.id}

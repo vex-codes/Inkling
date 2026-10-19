@@ -74,25 +74,25 @@ export function Customizer() {
           ref={panelRef}
           role="dialog"
           aria-label="Reading customizer"
-          className="grain absolute right-0 top-12 z-50 w-80 rounded-sm bg-card p-5 shadow-2xl ring-1 ring-line animate-in fade-in zoom-in-95 duration-150"
+          className="grain absolute right-0 top-12 z-50 w-80 rounded-sm border border-line bg-card p-6 shadow-2xl ring-1 ring-line/50 animate-in fade-in zoom-in-95 duration-150"
         >
-          <div className="flex items-center justify-between border-b border-line pb-3">
+          <div className="flex items-center justify-between border-b border-line pb-3.5">
             <h2 className="smallcaps text-base font-semibold tracking-wider">Sanctuary Settings</h2>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setPrefs(DEFAULT_PREFS)}
                 className="p-1 text-soft transition hover:text-ink"
                 title="Reset defaults"
                 aria-label="Reset default settings"
               >
-                <RotateCcw size={14} />
+                <RotateCcw size={14} strokeWidth={1.5} />
               </button>
               <button
                 onClick={() => setOpen(false)}
                 className="p-1 text-soft transition hover:text-ink"
                 aria-label="Close settings"
               >
-                <X size={16} />
+                <X size={16} strokeWidth={1.5} />
               </button>
             </div>
           </div>
@@ -239,15 +239,15 @@ export function Customizer() {
                     a.click()
                     URL.revokeObjectURL(url)
                   }}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded border border-line bg-paper/60 px-2.5 py-1.5 text-xs text-soft transition hover:bg-paper hover:text-ink"
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-sm border border-line bg-paper/60 px-3 py-2 text-xs text-soft transition hover:bg-paper hover:text-ink hover:border-soft"
                   title="Export complete library backup"
                 >
-                  <Download size={13} />
+                  <Download size={13} strokeWidth={1.5} />
                   <span>Backup .json</span>
                 </button>
 
-                <label className="flex flex-1 items-center justify-center gap-1.5 rounded border border-line bg-paper/60 px-2.5 py-1.5 text-xs text-soft transition hover:bg-paper hover:text-ink cursor-pointer">
-                  <FileDown size={13} />
+                <label className="flex flex-1 items-center justify-center gap-1.5 rounded-sm border border-line bg-paper/60 px-3 py-2 text-xs text-soft transition hover:bg-paper hover:text-ink hover:border-soft cursor-pointer">
+                  <FileDown size={13} strokeWidth={1.5} />
                   <span>Restore</span>
                   <input
                     type="file"

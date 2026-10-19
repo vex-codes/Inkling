@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { X, Copy, Check, Download, Search, MessageSquareQuote, FileText } from 'lucide-react'
+import { X, Copy, Check, Download, Search, MessageSquareQuote, FileText, Sparkles } from 'lucide-react'
 import { useStore } from '../store.ts'
 import { INKS, type Ink, type Style } from '../lib/db.ts'
 import { formatQuote, toMarkdown } from '../lib/text.ts'
@@ -15,8 +15,9 @@ export function Quotebook() {
 
   const [query, setQuery] = useState('')
   const [filterInk, setFilterInk] = useState<Ink | 'all'>('all')
-  const [copiedId, setCopiedId] = useState<string | null>(null)
-  const [exportNotice, setExportNotice] = useState(false)
+  const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [copiedExport, setCopiedExport] = useState(false)
 
   const activeStyle = prefs.style
 
@@ -35,26 +36,35 @@ export function Quotebook() {
     return list
   }, [notes, filterInk, query])
 
+  const exportMarkdown = useMemo(() => {
+    if (!book) return ''
+    return toMarkdown(book, notes, activeStyle)
+  }, [book, notes, activeStyle])
+
   if (!drawer || !book) return null
 
-  const handleCopyQuote = async (noteId: string, quote: string, page: number) => {
-    const formatted = formatQuote(activeStyle, quote, book, page + 1)
+  const handleCopyCitation = async (noteId: string, quote: string, page: number, style: Style) => {
+    const formatted = formatQuote(style, quote, book, page + 1)
     await navigator.clipboard.writeText(formatted.text)
-    setCopiedId(noteId)
-    setTimeout(() => setCopiedId(null), 2000)
+    const key = `${noteId}:${style}`
+    setCopiedKey(key)
+    setTimeout(() => setCopiedKey(null), 2000)
   }
 
-  const handleExportObsidian = () => {
-    const md = toMarkdown(book, notes, activeStyle)
-    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
+  const handleDownloadMarkdown = () => {
+    const blob = new Blob([exportMarkdown], { type: 'text/markdown;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
     a.download = `${book.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_Quotebook.md`
     a.click()
     URL.revokeObjectURL(url)
-    setExportNotice(true)
-    setTimeout(() => setExportNotice(false), 2500)
+  }
+
+  const handleCopyExportMarkdown = async () => {
+    await navigator.clipboard.writeText(exportMarkdown)
+    setCopiedExport(true)
+    setTimeout(() => setCopiedExport(false), 2000)
   }
 
   const STYLES: { id: Style; label: string; desc: string }[] = [
@@ -64,190 +74,263 @@ export function Quotebook() {
   ]
 
   return (
-    <aside
-      role="complementary"
-      aria-label="Quotebook & Academic Synthesis"
-      className="grain fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-line bg-card shadow-2xl transition-transform duration-300 ease-in-out sm:w-[26rem]"
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
-        <div className="flex items-center gap-2">
-          <MessageSquareQuote size={18} className="text-accent" />
-          <h2 className="smallcaps text-lg font-semibold tracking-wider">The Quotebook</h2>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={handleExportObsidian}
-            className="flex items-center gap-1.5 rounded border border-line px-2.5 py-1 text-xs text-soft transition hover:bg-paper hover:text-ink"
-            title="Download Obsidian / Markdown study guide"
-          >
-            {exportNotice ? <Check size={13} className="text-green-600" /> : <Download size={13} />}
-            <span className="smallcaps">{exportNotice ? 'Exported' : 'Export .md'}</span>
-          </button>
-          <button
-            onClick={() => toggleDrawer(false)}
-            className="p-1 text-soft transition hover:text-ink"
-            aria-label="Close Quotebook"
-          >
-            <X size={18} />
-          </button>
-        </div>
-      </div>
-
-      {/* Citation Style Bar */}
-      <div className="border-b border-line bg-paper/60 px-5 py-2.5">
-        <div className="flex items-center justify-between">
-          <span className="smallcaps text-[11px] font-semibold text-soft">Citation Format:</span>
-          <div className="flex rounded border border-line p-0.5">
-            {STYLES.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => setPrefs({ style: s.id })}
-                className={`rounded px-2.5 py-0.5 text-xs transition ${
-                  activeStyle === s.id
-                    ? 'bg-ink font-semibold text-paper'
-                    : 'text-soft hover:text-ink'
-                }`}
-                title={s.desc}
-              >
-                {s.label}
-              </button>
-            ))}
+    <>
+      <aside
+        role="complementary"
+        aria-label="Quotebook & Academic Synthesis"
+        className="grain fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-line bg-card shadow-2xl transition-transform duration-300 ease-in-out sm:w-[26rem]"
+      >
+        {/* Header (p-6 standard) */}
+        <div className="flex items-center justify-between border-b border-line px-6 py-4">
+          <div className="flex items-center gap-2.5">
+            <MessageSquareQuote size={18} strokeWidth={1.5} className="text-accent" />
+            <h2 className="smallcaps text-base font-semibold tracking-wider">The Quotebook</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowExportModal(true)}
+              className="flex items-center gap-1.5 rounded-sm border border-line px-2.5 py-1 text-xs text-soft transition hover:bg-paper hover:text-ink hover:border-soft"
+              title="Preview and export Markdown / Obsidian study guide"
+            >
+              <Download size={13} strokeWidth={1.5} />
+              <span className="smallcaps font-sans">Export .md</span>
+            </button>
+            <button
+              onClick={() => toggleDrawer(false)}
+              className="p-1 text-soft transition hover:text-ink"
+              aria-label="Close Quotebook"
+            >
+              <X size={18} strokeWidth={1.5} />
+            </button>
           </div>
         </div>
-      </div>
 
-      {/* Filter and Search */}
-      <div className="space-y-2 border-b border-line p-3">
-        <div className="relative">
-          <Search size={14} className="absolute left-2.5 top-2.5 text-soft" />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search quotes, marginalia, motifs..."
-            className="w-full rounded border border-line bg-paper/40 py-1.5 pl-8 pr-3 text-xs text-ink placeholder:text-soft/60 outline-none focus:border-accent"
-          />
-        </div>
-
-        {/* Ink filters */}
-        <div className="flex items-center gap-1 overflow-x-auto pb-0.5 text-[11px]">
-          <button
-            onClick={() => setFilterInk('all')}
-            className={`rounded px-2 py-0.5 smallcaps transition ${
-              filterInk === 'all' ? 'bg-line text-ink font-semibold' : 'text-soft hover:text-ink'
-            }`}
-          >
-            All ({notes.length})
-          </button>
-          {INKS.map((c) => {
-            const count = notes.filter((n) => n.color === c).length
-            if (count === 0 && filterInk !== c) return null
-            const label = book.legend[c] || c
-            return (
-              <button
-                key={c}
-                onClick={() => setFilterInk(c === filterInk ? 'all' : c)}
-                style={ink(c)}
-                className={`flex items-center gap-1 rounded px-2 py-0.5 transition ${
-                  filterInk === c ? 'bg-line text-ink font-semibold' : 'text-soft hover:text-ink'
-                }`}
-              >
-                <span className="blot size-2.5" style={ink(c)} />
-                <span className="truncate max-w-[80px]">{label}</span>
-                <span className="text-[10px] opacity-70">({count})</span>
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Quotes Stream */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {filtered.length === 0 ? (
-          <div className="py-16 text-center text-soft">
-            <FileText size={32} className="mx-auto mb-2 opacity-40" />
-            <p className="font-serif italic text-sm">No annotations found.</p>
-            <p className="mt-1 text-xs">Select text in the prose to begin gathering thoughts.</p>
+        {/* Global Citation Style Preference Bar */}
+        <div className="border-b border-line bg-paper/60 px-6 py-2.5">
+          <div className="flex items-center justify-between">
+            <span className="smallcaps text-[11px] font-semibold text-soft">Default Style:</span>
+            <div className="flex rounded-sm border border-line p-0.5">
+              {STYLES.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setPrefs({ style: s.id })}
+                  className={`rounded-xs px-2.5 py-0.5 text-xs transition ${
+                    activeStyle === s.id
+                      ? 'bg-ink font-semibold text-paper'
+                      : 'text-soft hover:text-ink'
+                  }`}
+                  title={s.desc}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
           </div>
-        ) : (
-          filtered.map((n) => {
-            const citeInfo = formatQuote(activeStyle, n.quote, book, n.page + 1)
-            const isCopied = copiedId === n.id
-            const legendLabel = book.legend[n.color] || n.color
+        </div>
 
-            return (
-              <article
-                key={n.id}
-                style={ink(n.color)}
-                className="group relative rounded border border-line bg-paper/60 p-3 text-xs shadow-sm transition hover:bg-paper hover:shadow"
+        {/* Filter and Search */}
+        <div className="space-y-2.5 border-b border-line px-6 py-4">
+          <div className="relative">
+            <Search size={14} strokeWidth={1.5} className="absolute left-3 top-2.5 text-soft" />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search quotes, marginalia, motifs..."
+              className="w-full rounded-sm border border-line bg-paper/50 py-1.5 pl-9 pr-3 text-xs text-ink placeholder:text-soft/60 outline-none focus:border-accent"
+            />
+          </div>
+
+          {/* Ink color filters */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-[11px]">
+            <button
+              onClick={() => setFilterInk('all')}
+              className={`rounded-sm px-2.5 py-1 smallcaps transition ${
+                filterInk === 'all' ? 'bg-line text-ink font-semibold' : 'text-soft hover:text-ink'
+              }`}
+            >
+              All ({notes.length})
+            </button>
+            {INKS.map((c) => {
+              const count = notes.filter((n) => n.color === c).length
+              if (count === 0 && filterInk !== c) return null
+              const label = book.legend[c] || c
+              return (
+                <button
+                  key={c}
+                  onClick={() => setFilterInk(c === filterInk ? 'all' : c)}
+                  style={ink(c)}
+                  className={`flex items-center gap-1.5 rounded-sm px-2.5 py-1 transition ${
+                    filterInk === c ? 'bg-line text-ink font-semibold' : 'text-soft hover:text-ink'
+                  }`}
+                >
+                  <span className="blot size-2.5" style={ink(c)} />
+                  <span className="truncate max-w-[80px]">{label}</span>
+                  <span className="text-[10px] opacity-70">({count})</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Quotes Stream (p-6 standard body padding) */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {filtered.length === 0 ? (
+            <div className="py-20 text-center text-soft">
+              <FileText size={32} strokeWidth={1.5} className="mx-auto mb-2 opacity-40" />
+              <p className="font-serif italic text-sm">No annotations found.</p>
+              <p className="mt-1 text-xs">Select text in the prose to begin gathering thoughts.</p>
+            </div>
+          ) : (
+            filtered.map((n) => {
+              const legendLabel = book.legend[n.color] || n.color
+
+              return (
+                <article
+                  key={n.id}
+                  style={ink(n.color)}
+                  className="group relative rounded-sm border border-line bg-paper/60 p-4 text-xs shadow-xs transition hover:bg-paper hover:shadow-sm"
+                >
+                  {/* Top row: Chapter / Page number badge + Highlighter color dot */}
+                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-line/50 text-soft">
+                    <button
+                      onClick={() => goToPage(n.page)}
+                      className="flex items-center gap-1.5 font-sans font-medium text-ink hover:text-accent transition"
+                      title={`Jump to page ${n.page + 1}`}
+                    >
+                      <span className="smallcaps text-[11px] bg-line/40 px-2 py-0.5 rounded-sm hover:underline">
+                        Page {n.page + 1}
+                      </span>
+                    </button>
+
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className="blot size-2.5"
+                        style={ink(n.color)}
+                        title={legendLabel}
+                      />
+                      <span className="smallcaps text-[10px] text-soft font-semibold">{legendLabel}</span>
+                    </div>
+                  </div>
+
+                  {/* Middle: Extracted passage enclosed in classic typographical curly quotes (“ ”) */}
+                  <blockquote
+                    className="font-serif italic text-ink text-[13px] leading-relaxed border-l-2 pl-3 my-2.5"
+                    style={{ borderColor: `rgb(var(--${n.color}))` }}
+                  >
+                    “{n.quote}”
+                  </blockquote>
+
+                  {/* Student's marginal commentary if exists */}
+                  {n.note.trim() && (
+                    <div className="mt-2.5 rounded-sm bg-card/90 p-2.5 font-hand text-[15px] leading-tight text-ink border border-line/60">
+                      {n.note}
+                    </div>
+                  )}
+
+                  {/* Bottom row: 1-click citation copy button (MLA, APA, Chicago pills) + Delete */}
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-line/40">
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-soft/80 smallcaps mr-1">Cite:</span>
+                      {(['mla', 'apa', 'chicago'] as Style[]).map((st) => {
+                        const isCopied = copiedKey === `${n.id}:${st}`
+                        return (
+                          <button
+                            key={st}
+                            onClick={() => handleCopyCitation(n.id, n.quote, n.page, st)}
+                            className={`flex items-center gap-1 rounded-sm px-2 py-0.5 font-sans text-[10px] uppercase font-semibold border transition ${
+                              isCopied
+                                ? 'bg-ink text-paper border-ink'
+                                : 'bg-card text-soft border-line hover:text-ink hover:border-soft'
+                            }`}
+                            title={`Copy ${st.toUpperCase()} citation`}
+                          >
+                            {isCopied ? <Check size={10} strokeWidth={1.5} className="text-green-500" /> : null}
+                            <span>{isCopied ? 'Copied' : st}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    <button
+                      onClick={() => removeNote(n.id)}
+                      className="rounded p-1 text-soft opacity-40 hover:opacity-100 hover:text-accent transition"
+                      title="Delete annotation"
+                    >
+                      <X size={13} strokeWidth={1.5} />
+                    </button>
+                  </div>
+                </article>
+              )
+            })
+          )}
+        </div>
+
+        {/* Footer (p-6 standard) */}
+        <footer className="border-t border-line bg-paper/80 px-6 py-4 text-center text-xs text-soft">
+          <span className="smallcaps">
+            {filtered.length} of {notes.length} marginalia · Hotkey: ⌘J / Ctrl+J
+          </span>
+        </footer>
+      </aside>
+
+      {/* Export Preview Modal */}
+      {showExportModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs"
+          onClick={() => setShowExportModal(false)}
+        >
+          <div
+            className="grain w-full max-w-2xl rounded-sm border border-line bg-card p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-line pb-3 mb-4">
+              <div className="flex items-center gap-2">
+                <Sparkles size={18} strokeWidth={1.5} className="text-accent" />
+                <h3 className="smallcaps text-base font-semibold">Markdown / Obsidian Export Preview</h3>
+              </div>
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="p-1 text-soft hover:text-ink"
+                aria-label="Close export preview"
               >
-                {/* Header: Page badge, kind & legend label, jump to page button */}
-                <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-line/50 text-soft">
-                  <button
-                    onClick={() => goToPage(n.page)}
-                    className="flex items-center gap-1.5 font-sans font-medium text-ink hover:text-accent transition"
-                    title={`Jump to page ${n.page + 1}`}
-                  >
-                    <span className="smallcaps text-[11px] underline underline-offset-2">
-                      Page {n.page + 1}
-                    </span>
-                  </button>
+                <X size={16} strokeWidth={1.5} />
+              </button>
+            </div>
 
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className="blot size-2.5"
-                      style={ink(n.color)}
-                      title={legendLabel}
-                    />
-                    <span className="smallcaps text-[10px] text-soft">{legendLabel}</span>
-                  </div>
-                </div>
+            <p className="font-serif italic text-xs text-soft mb-3">
+              Formatted study guide with live citations, marginalia thoughts, and thematic tags ready for Obsidian or your notes app:
+            </p>
 
-                {/* Formatted quotation */}
-                <blockquote
-                  className="font-serif italic text-ink text-[13px] leading-relaxed border-l-2 pl-2.5 my-2"
-                  style={{ borderColor: `rgb(var(--${n.color}))` }}
-                  dangerouslySetInnerHTML={{ __html: citeInfo.html }}
-                />
+            <pre className="max-h-80 overflow-y-auto rounded-sm border border-line bg-paper/60 p-4 font-mono text-[11px] leading-relaxed text-ink select-all whitespace-pre-wrap">
+              {exportMarkdown}
+            </pre>
 
-                {/* Student's marginal note if exists */}
-                {n.note.trim() && (
-                  <div className="mt-2 rounded bg-card/80 p-2 font-hand text-[15px] leading-tight text-ink border border-line/60">
-                    {n.note}
-                  </div>
-                )}
+            <div className="mt-5 flex items-center justify-between gap-3 border-t border-line pt-4">
+              <span className="text-[11px] text-soft">
+                {notes.length} annotations formatted in {activeStyle.toUpperCase()}
+              </span>
 
-                {/* Card actions: 1-Click Copy Citation, Delete */}
-                <div className="mt-2.5 flex items-center justify-end gap-1.5 pt-1.5 border-t border-line/40">
-                  <button
-                    onClick={() => handleCopyQuote(n.id, n.quote, n.page)}
-                    className="flex items-center gap-1 rounded bg-card px-2.5 py-1 font-sans text-[11px] text-ink border border-line shadow-2xs transition hover:border-accent hover:text-accent"
-                    title="Copy quotation and formatted citation"
-                  >
-                    {isCopied ? <Check size={12} className="text-green-600" /> : <Copy size={12} />}
-                    <span>{isCopied ? 'Copied' : `Copy ${activeStyle.toUpperCase()}`}</span>
-                  </button>
-                  <button
-                    onClick={() => removeNote(n.id)}
-                    className="rounded p-1 text-soft opacity-40 hover:opacity-100 hover:text-accent transition"
-                    title="Delete annotation"
-                  >
-                    <X size={13} />
-                  </button>
-                </div>
-              </article>
-            )
-          })
-        )}
-      </div>
-
-      {/* Footer count */}
-      <footer className="border-t border-line bg-paper/80 px-5 py-2.5 text-center text-[11px] text-soft">
-        <span className="smallcaps">
-          {filtered.length} of {notes.length} marginalia · Hotkey: ⌘J / Ctrl+J
-        </span>
-      </footer>
-    </aside>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleCopyExportMarkdown}
+                  className="flex items-center gap-1.5 rounded-sm border border-line px-4 py-2 font-serif text-xs text-ink hover:bg-paper transition"
+                >
+                  {copiedExport ? <Check size={14} strokeWidth={1.5} className="text-green-600" /> : <Copy size={14} strokeWidth={1.5} />}
+                  <span>{copiedExport ? 'Copied to Clipboard' : 'Copy to Clipboard'}</span>
+                </button>
+                <button
+                  onClick={handleDownloadMarkdown}
+                  className="flex items-center gap-1.5 rounded-sm bg-ink px-4 py-2 font-serif text-xs text-paper shadow-xs hover:opacity-90 transition"
+                >
+                  <Download size={14} strokeWidth={1.5} />
+                  <span>Download .md</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }

@@ -407,28 +407,28 @@ export function Bookshelf() {
           onClick={() => setEditingBook(null)}
         >
           <div
-            className="grain w-full max-w-sm rounded border border-line bg-card p-5 shadow-2xl"
+            className="grain w-full max-w-sm rounded-sm border border-line bg-card p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-line pb-2 mb-4">
+            <div className="flex items-center justify-between border-b border-line pb-3 mb-4">
               <h3 className="smallcaps text-base font-semibold">Book Details</h3>
               <button
                 onClick={() => setEditingBook(null)}
                 className="p-1 text-soft hover:text-ink"
                 aria-label="Close dialog"
               >
-                <X size={16} />
+                <X size={16} strokeWidth={1.5} />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
+            <div className="space-y-3.5 text-xs">
               <div>
                 <label className="smallcaps block text-soft mb-1">Title</label>
                 <input
                   type="text"
                   value={renameTitle}
                   onChange={(e) => setRenameTitle(e.target.value)}
-                  className="w-full rounded border border-line bg-paper px-2.5 py-1.5 font-serif text-sm text-ink outline-none focus:border-accent"
+                  className="w-full rounded-sm border border-line bg-paper px-3 py-2 font-serif text-sm text-ink outline-none focus:border-accent"
                 />
               </div>
 
@@ -438,7 +438,7 @@ export function Bookshelf() {
                   type="text"
                   value={renameAuthor}
                   onChange={(e) => setRenameAuthor(e.target.value)}
-                  className="w-full rounded border border-line bg-paper px-2.5 py-1.5 font-serif text-sm text-ink outline-none focus:border-accent"
+                  className="w-full rounded-sm border border-line bg-paper px-3 py-2 font-serif text-sm text-ink outline-none focus:border-accent"
                 />
               </div>
 
@@ -449,21 +449,21 @@ export function Bookshelf() {
                   value={renameYear}
                   onChange={(e) => setRenameYear(e.target.value)}
                   placeholder="e.g. 1925"
-                  className="w-full rounded border border-line bg-paper px-2.5 py-1.5 font-sans text-xs text-ink outline-none focus:border-accent"
+                  className="w-full rounded-sm border border-line bg-paper px-3 py-2 font-sans text-xs text-ink outline-none focus:border-accent"
                 />
               </div>
             </div>
 
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="mt-6 flex justify-end gap-2.5">
               <button
                 onClick={() => setEditingBook(null)}
-                className="rounded px-3 py-1.5 text-xs text-soft hover:text-ink"
+                className="rounded-sm px-4 py-2 text-xs text-soft hover:text-ink transition"
               >
                 Cancel
               </button>
               <button
                 onClick={() => void handleSaveRename()}
-                className="rounded bg-ink px-4 py-1.5 font-serif text-xs text-paper shadow-xs hover:opacity-90"
+                className="rounded-sm bg-ink px-4 py-2 font-serif text-xs text-paper shadow-xs hover:opacity-90 transition"
               >
                 Save Details
               </button>
