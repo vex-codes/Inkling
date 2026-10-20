@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { Library, NotebookPen, Feather, Maximize2, Minimize2 } from 'lucide-react'
+import { Library, NotebookPen, Feather, Maximize2, Minimize2, Columns2, Link2, Unlink2 } from 'lucide-react'
 import { useStore } from '../store.ts'
 import { Page } from './Page.tsx'
 import { SelectionPopover } from './SelectionPopover.tsx'
@@ -22,7 +22,21 @@ export function Reader() {
   const drawer = useStore((s) => s.drawer)
   const isSaving = useStore((s) => s.isSaving)
   const focusMode = useStore((s) => s.focusMode)
-  const { closeBook, toggleDrawer, toggleFocusMode } = useStore.getState()
+  const comparativeMode = useStore((s) => s.comparativeMode)
+  const comparativeBookId = useStore((s) => s.comparativeBookId)
+  const comparativePages = useStore((s) => s.comparativePages)
+  const comparativeNotes = useStore((s) => s.comparativeNotes)
+  const syncScroll = useStore((s) => s.syncScroll)
+  const books = useStore((s) => s.books)
+  const {
+    closeBook,
+    toggleDrawer,
+    toggleFocusMode,
+    toggleComparativeMode,
+    setComparativeBook,
+    setComparativeNotes,
+    toggleSyncScroll,
+  } = useStore.getState()
 
   const [current] = useState(book.page)
   const currentRef = useRef(book.page)
@@ -35,12 +49,18 @@ export function Reader() {
     }
   }, [book.id])
 
-  // Keyboard navigation: ⌘J quotebook · J/K / Arrows page turn · F Focus mode · Esc
+  // Keyboard navigation: ⌘J quotebook · ⌘\ comparative view · J/K / Arrows page turn · F Focus mode · Esc
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') {
         e.preventDefault()
         toggleDrawer()
+        return
+      }
+
+      if ((e.metaKey || e.ctrlKey) && (e.key === '\\' || e.code === 'Backslash')) {
+        e.preventDefault()
+        toggleComparativeMode()
         return
       }
 
@@ -128,6 +148,19 @@ export function Reader() {
         </div>
 
         <div className="flex items-center gap-1.5">
+          {/* Comparative Split-View button */}
+          <button
+            onClick={() => toggleComparativeMode()}
+            className={`grid size-9 place-items-center rounded-md transition ${
+              comparativeMode ? 'bg-line text-accent font-semibold' : 'text-soft hover:bg-line hover:text-ink focus-visible:bg-line'
+            }`}
+            aria-pressed={comparativeMode}
+            aria-label="Comparative Split-View (⌘\)"
+            title="Comparative Split-View (⌘\)"
+          >
+            <Columns2 size={18} strokeWidth={1.5} />
+          </button>
+
           {/* Focus Mode button */}
           <button
             onClick={() => toggleFocusMode()}
@@ -163,9 +196,88 @@ export function Reader() {
           drawer ? 'xl:pr-[26rem]' : ''
         }`}
       >
-        {pages.map((html, i) => (
-          <Page key={`${book.id}:${i}`} index={i} html={html} />
-        ))}
+        {comparativeMode ? (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 w-full px-4 max-w-[1920px]">
+            {/* Column 1: Primary Book */}
+            <div className="flex flex-col items-center gap-10">
+              <div className="sticky top-14 z-20 w-full border-b border-line bg-paper/90 px-4 py-2 backdrop-blur-xs flex justify-between items-center text-xs">
+                <span className="font-serif italic font-semibold">{book.title} (Primary Text)</span>
+                <span className="smallcaps text-soft">Page {current + 1} of {pages.length}</span>
+              </div>
+              {pages.map((html, i) => (
+                <Page key={`${book.id}:${i}`} index={i} html={html} />
+              ))}
+            </div>
+
+            {/* Column 2: Comparative Text or Criticism / Scratchpad */}
+            <div className="flex flex-col items-center gap-6 border-t xl:border-t-0 xl:border-l border-line xl:pl-8">
+              {/* Secondary Header with Selector and Sync Scroll */}
+              <div className="sticky top-14 z-20 w-full border-b border-line bg-paper/90 px-4 py-2 backdrop-blur-xs flex justify-between items-center text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="smallcaps font-semibold text-soft">Compare:</span>
+                  <select
+                    value={comparativeBookId || 'scratchpad'}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      void setComparativeBook(val === 'scratchpad' ? null : val)
+                    }}
+                    className="rounded border border-line bg-card px-2 py-1 text-xs text-ink outline-none focus:border-accent cursor-pointer"
+                  >
+                    <option value="scratchpad">✎ Comparative Criticism & Scratchpad</option>
+                    {books.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        📖 {b.title} ({b.author})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {comparativeBookId && (
+                  <button
+                    onClick={() => toggleSyncScroll()}
+                    className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] transition cursor-pointer ${
+                      syncScroll ? 'text-accent font-medium bg-line/60' : 'text-soft hover:text-ink'
+                    }`}
+                    title="Synchronize scrolling between both texts"
+                  >
+                    {syncScroll ? <Link2 size={12} /> : <Unlink2 size={12} />}
+                    <span>Sync Scroll</span>
+                  </button>
+                )}
+              </div>
+
+              {comparativeBookId ? (
+                <div className="flex flex-col items-center gap-10 w-full">
+                  {comparativePages.map((html, i) => (
+                    <div key={`comp:${comparativeBookId}:${i}`} className="w-full flex justify-center">
+                      <Page index={i} html={html} />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="w-full rounded-sm border border-line bg-card p-6 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between border-b border-line pb-2">
+                    <h3 className="font-serif italic font-semibold text-sm">Comparative Scholar Scratchpad</h3>
+                    <span className="text-[11px] text-soft">Translation synthesis · Cross-textual criticism</span>
+                  </div>
+                  <p className="font-serif italic text-xs text-soft">
+                    Place variant translations (e.g. Fagles vs. Lattimore Homer) or paste secondary literary criticism alongside the primary text. Notes persist in your session.
+                  </p>
+                  <textarea
+                    value={comparativeNotes}
+                    onChange={(e) => setComparativeNotes(e.target.value)}
+                    placeholder="Type or paste translation variants, seminar prompts, or critical commentary here..."
+                    className="w-full h-[60vh] rounded border border-line bg-paper/50 p-4 font-serif text-sm leading-relaxed text-ink outline-none focus:border-accent resize-none placeholder:text-soft/50"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          pages.map((html, i) => (
+            <Page key={`${book.id}:${i}`} index={i} html={html} />
+          ))
+        )}
         <p className="smallcaps text-soft py-8">❦ end of {book.title} ❦</p>
       </main>
 

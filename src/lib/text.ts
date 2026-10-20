@@ -6,6 +6,19 @@ export const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '
 export const countWords = (html: string) => html.replace(/<[^>]+>/g, ' ').split(/\s+/).filter(Boolean).length
 
 /**
+ * Academic text normalizer: converts smart quotes, apostrophes, dashes, and NFKD accents
+ * to standard ASCII equivalents so searches match typography accurately.
+ */
+export function normalizeText(str: string): string {
+  return (str || '')
+    .toLowerCase()
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-')
+    .normalize('NFKD')
+}
+
+/**
  * Markdown/plain text → chapters of HTML blocks. `#` headings open a new chapter.
  * ponytail: paragraphs, headings, *em*, _em_, **strong** only — enough for literature
  * archives (Gutenberg uses _italics_). Swap in `marked` if lists/links/code matter.

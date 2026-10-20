@@ -4,14 +4,46 @@ import type { Annotation } from './db.ts'
 
 /** Offsets of a selection within `root`'s text, trimmed of surrounding whitespace. */
 export function textOffsets(root: Node, r: Range) {
-  const pre = document.createRange()
-  pre.selectNodeContents(root)
-  pre.setEnd(r.startContainer, r.startOffset)
+  const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  let pos = 0
+  let start = -1
+  let end = -1
+
+  for (let n = walk.nextNode() as Text | null; n; n = walk.nextNode() as Text | null) {
+    const len = n.data.length
+    if (start === -1) {
+      if (n === r.startContainer) {
+        start = pos + r.startOffset
+      } else if (r.comparePoint(n, 0) >= 0) {
+        start = pos
+      }
+    }
+    if (n === r.endContainer) {
+      end = pos + r.endOffset
+      break
+    }
+    pos += len
+  }
+
+  if (start === -1 || end === -1) {
+    const pre = document.createRange()
+    pre.selectNodeContents(root)
+    pre.setEnd(r.startContainer, r.startOffset)
+    start = pre.toString().length
+    end = start + r.toString().length
+  }
+
   const raw = r.toString()
   const quote = raw.trim()
   if (!quote) return null
-  const start = pre.toString().length + (raw.length - raw.trimStart().length)
-  return { start, end: start + quote.length, quote }
+
+  const leadingWs = raw.length - raw.trimStart().length
+  const trailingWs = raw.length - raw.trimEnd().length
+  return {
+    start: start + leadingWs,
+    end: end - trailingWs,
+    quote,
+  }
 }
 
 /** Rebuild a live Range from stored offsets. Null if the text no longer reaches that far. */
@@ -42,6 +74,14 @@ export function layer(name: string): Highlight | null {
     layers.set(name, h)
   }
   return h
+}
+
+/** Flush all active Highlight layer sets on book teardown to prevent zombie memory retention. */
+export function clearAllHighlightLayers() {
+  if (!supported) return
+  for (const h of layers.values()) {
+    h.clear()
+  }
 }
 
 /** Brackets draw in the gutter instead of on the text. */

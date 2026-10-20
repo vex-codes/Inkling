@@ -32,6 +32,30 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: 'OpenDyslexic';
+  src: url('/fonts/OpenDyslexic-Regular.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'OpenDyslexic';
+  src: url('/fonts/OpenDyslexic-Italic.woff') format('woff');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'OpenDyslexic';
+  src: url('/fonts/OpenDyslexic-Bold.woff') format('woff');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ── Paper stocks ─────────────────────────────────────────────────────────────
    Every surface reads from these; [data-theme] on <html> swaps the whole room. */
 :root,
@@ -304,4 +328,33 @@ textarea.field-auto { field-sizing: content; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}
+
+/* ── Printable Socratic Seminar Cheat Sheet ────────────────────────────────── */
+@media print {
+  @page {
+    margin: 1.5cm;
+    size: letter portrait;
+  }
+  body {
+    background: #ffffff !important;
+    color: #111111 !important;
+  }
+  header,
+  nav,
+  aside,
+  button,
+  .flight-mode,
+  .reading-scrubber-track,
+  .settings-modal-dialog,
+  [role="complementary"],
+  .reader-page-container,
+  .selection-popover {
+    display: none !important;
+  }
+  #seminar-print-sheet {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+  }
 }

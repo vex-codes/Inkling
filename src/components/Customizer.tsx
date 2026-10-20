@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { SlidersHorizontal, X, RotateCcw, Download, FileDown } from 'lucide-react'
+import { SlidersHorizontal, X, RotateCcw, Download, FileDown, Headphones, Volume2, VolumeX } from 'lucide-react'
 import { useStore } from '../store.ts'
 import { INKS, type Font, type Theme, DEFAULT_PREFS } from '../lib/db.ts'
 import { ink } from './Page.tsx'
+import { sanctuaryAudio, type SoundscapeType } from '../lib/audio.ts'
 
 export const FONTS: Record<Font, { label: string; family: string; desc: string }> = {
   garamond: {
@@ -26,6 +27,11 @@ export const FONTS: Record<Font, { label: string; family: string; desc: string }
     family: '"Libron", Georgia, serif',
     desc: 'Bespoke literary serif',
   },
+  dyslexic: {
+    label: 'OpenDyslexic',
+    family: '"OpenDyslexic", "Atkinson Hyperlegible", sans-serif',
+    desc: 'Weighted bottoms for reading clarity',
+  },
 }
 
 export const THEMES: { id: Theme; name: string; bg: string; ink: string }[] = [
@@ -44,6 +50,19 @@ export function Customizer() {
   const book = useStore((s) => s.book)
   const { setPrefs, updateBook } = useStore.getState()
   const panelRef = useRef<HTMLDivElement>(null)
+
+  const [soundscape, setSoundscapeState] = useState<SoundscapeType>(sanctuaryAudio.getSoundscape())
+  const [ambientVol, setAmbientVol] = useState(sanctuaryAudio.getVolume())
+
+  const handleSelectSoundscape = (type: SoundscapeType) => {
+    setSoundscapeState(type)
+    sanctuaryAudio.setSoundscape(type)
+  }
+
+  const handleVolumeChange = (vol: number) => {
+    setAmbientVol(vol)
+    sanctuaryAudio.setVolume(vol)
+  }
 
   useEffect(() => {
     if (!open) return
@@ -193,6 +212,60 @@ export function Customizer() {
                     className="mt-1 w-full accent-accent cursor-pointer"
                   />
                 </div>
+              </div>
+
+              {/* Offline Procedural Ambient Soundscapes (Web Audio API) */}
+              <div className="border-t border-line pt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="smallcaps block font-semibold text-soft">
+                    Offline Soundscapes
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 mb-2.5">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectSoundscape('off')}
+                    className={`flex items-center justify-center gap-2 p-2.5 rounded-sm border text-xs transition cursor-pointer ${
+                      soundscape === 'off'
+                        ? 'border-accent bg-paper font-semibold text-accent shadow-xs'
+                        : 'border-line bg-paper/40 text-soft hover:bg-paper hover:text-ink'
+                    }`}
+                  >
+                    <VolumeX size={15} />
+                    <span className="text-xs">Silent</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectSoundscape('lofi')}
+                    className={`flex items-center justify-center gap-2 p-2.5 rounded-sm border text-xs transition cursor-pointer ${
+                      soundscape === 'lofi'
+                        ? 'border-accent bg-paper font-semibold text-accent shadow-xs'
+                        : 'border-line bg-paper/40 text-soft hover:bg-paper hover:text-ink'
+                    }`}
+                  >
+                    <Headphones size={15} />
+                    <span className="text-xs">Lo-Fi Beats</span>
+                  </button>
+                </div>
+
+                {soundscape === 'lofi' && (
+                  <div className="flex items-center gap-2 px-1">
+                    <Volume2 size={12} className="text-soft shrink-0" />
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={ambientVol}
+                      onChange={(e) => handleVolumeChange(Number(e.target.value))}
+                      className="w-full accent-accent cursor-pointer"
+                    />
+                    <span className="text-[11px] text-soft font-mono w-7 text-right">
+                      {Math.round(ambientVol * 100)}%
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Book Annotation Legend */}

@@ -1,6 +1,6 @@
 // Run: npm run check   (Node ≥ 23 strips TS types natively)
 import assert from 'node:assert/strict'
-import { authorLast, cite, formatQuote, mdToChapters, paginate, stackMargin, toMarkdown } from './text.ts'
+import { authorLast, cite, formatQuote, mdToChapters, paginate, stackMargin, toMarkdown, normalizeText } from './text.ts'
 import { DEFAULT_LEGEND, type Book } from './db.ts'
 
 console.log('Running Inkling self-check & stress tests...')
@@ -72,5 +72,23 @@ const md = toMarkdown(
 assert.match(md, /^---\ntitle: "The Great Gatsby"/)
 assert.match(md, /## Page 3\n\n> “green light” \(Fitzgerald 3\)\.\n\n#motif · highlight — motif!/)
 assert.match(md, /- p\. 1 — Thesis #motif/)
+
+// 6. Crucible Stress Suite: 1,000 Annotations Saturation Test
+const thousandNotes = Array.from({ length: 1000 }, (_, i) => ({
+  top: (i % 30) * 40 + (i % 5) * 8,
+  height: 38,
+}))
+const tStack = performance.now()
+const stackedThousand = stackMargin(thousandNotes, 10)
+const elapsedStack = performance.now() - tStack
+assert.equal(stackedThousand.length, 1000)
+assert.ok(elapsedStack < 25, `1,000 margin layout took ${elapsedStack.toFixed(1)}ms (target: <25ms)`)
+console.log(`✓ Crucible: 1,000 annotations stacked in ${elapsedStack.toFixed(2)}ms`)
+
+// 7. Academic Smart Quote & Dash Normalization Test
+assert.equal(normalizeText('“The Waste Land” — T.S. Eliot'), '"the waste land" - t.s. eliot')
+assert.equal(normalizeText("Macbeth’s ‘fatal vision’"), "macbeth's 'fatal vision'")
+assert.ok(normalizeText('“Green Light”').includes(normalizeText('"green light"')))
+console.log('✓ Academic typographic quote & dash normalization passed.')
 
 console.log('✓ All unit and stress-test assertions passed cleanly.')

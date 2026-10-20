@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { db, DEFAULT_LEGEND, DEFAULT_PREFS, type Annotation, type Book, type Flag, type Ink, type Kind, type Prefs } from './lib/db.ts'
-import { findInHtml } from './lib/anchor.ts'
+import { findInHtml, clearAllHighlightLayers } from './lib/anchor.ts'
 import { ingest } from './lib/ingest.ts'
 import { countWords, mdToChapters, paginate } from './lib/text.ts'
 import gatsby from './sample/gatsby-ch1.md?raw'
@@ -27,12 +27,21 @@ interface State {
   focusId: string | null
   focusMode: boolean
   isFastScrolling: boolean
+  comparativeMode: boolean
+  comparativeBookId: string | null
+  comparativePages: string[]
+  comparativeNotes: string
+  syncScroll: boolean
   deletedStash: DeletedStash | null
   storageWarning: string | null
   init(): Promise<void>
   setPrefs(p: Partial<Prefs>): void
   setFastScrolling(active: boolean): void
   toggleFocusMode(on?: boolean): void
+  toggleComparativeMode(on?: boolean): void
+  setComparativeBook(id: string | null): Promise<void>
+  setComparativeNotes(notes: string): void
+  toggleSyncScroll(on?: boolean): void
   addBook(file: File): Promise<void>
   stageRemoveBook(id: string): Promise<void>
   undoRemoveBook(): Promise<void>
@@ -67,7 +76,13 @@ export const useStore = create<State>()((set, get) => {
 
   const persist = (p: Promise<unknown>) => {
     signalSave()
-    return p.catch((e) => console.error('[inkling] IndexedDB write failed', e))
+    return p.catch((e: unknown) => {
+      console.error('[inkling] IndexedDB write failed', e)
+      const err = e as { name?: string; message?: string }
+      if (err?.name === 'QuotaExceededError' || err?.message?.includes?.('quota')) {
+        set({ storageWarning: 'Storage quota exceeded. Please export a sanctuary backup to preserve your notes.' })
+      }
+    })
   }
 
   const patchBook = (patch: Partial<Book>) => {
@@ -148,6 +163,11 @@ export const useStore = create<State>()((set, get) => {
     focusId: null,
     focusMode: false,
     isFastScrolling: false,
+    comparativeMode: false,
+    comparativeBookId: null,
+    comparativePages: [],
+    comparativeNotes: '',
+    syncScroll: true,
     deletedStash: null,
     storageWarning: null,
 
@@ -295,6 +315,7 @@ export const useStore = create<State>()((set, get) => {
     },
 
     async openBook(id) {
+      clearAllHighlightLayers()
       const [book, content, notes] = await Promise.all([
         db.books.get(id),
         db.contents.get(id),
@@ -305,13 +326,54 @@ export const useStore = create<State>()((set, get) => {
         book: { ...book, legend: { ...DEFAULT_LEGEND, ...book.legend } },
         pages: content.pages,
         notes,
+        focusId: null,
       })
       get().setPrefs({ lastBook: id })
     },
 
     closeBook() {
-      set({ book: null, pages: [], notes: [], drawer: false })
+      clearAllHighlightLayers()
+      set({
+        book: null,
+        pages: [],
+        notes: [],
+        drawer: false,
+        comparativeMode: false,
+        comparativeBookId: null,
+        comparativePages: [],
+      })
       get().setPrefs({ lastBook: null })
+    },
+
+    toggleComparativeMode(on) {
+      const next = on ?? !get().comparativeMode
+      set({ comparativeMode: next })
+      if (next && !get().comparativeBookId) {
+        const other = get().books.find((b) => b.id !== get().book?.id)
+        if (other) {
+          void get().setComparativeBook(other.id)
+        }
+      }
+    },
+
+    async setComparativeBook(id) {
+      if (!id) {
+        set({ comparativeBookId: null, comparativePages: [] })
+        return
+      }
+      const content = await db.contents.get(id)
+      set({
+        comparativeBookId: id,
+        comparativePages: content?.pages ?? [],
+      })
+    },
+
+    setComparativeNotes(notes) {
+      set({ comparativeNotes: notes })
+    },
+
+    toggleSyncScroll(on) {
+      set({ syncScroll: on ?? !get().syncScroll })
     },
 
     updateBook: patchBook,

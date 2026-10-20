@@ -1,6 +1,8 @@
 import { useRef, useEffect, useCallback, memo, useMemo } from 'react'
 import { Bookmark, Flag as FlagIcon } from 'lucide-react'
 import { useStore } from '../store.ts'
+import { INKS } from '../lib/db.ts'
+import { goToPage } from './Reader.tsx'
 
 interface Props {
   totalPages: number
@@ -10,6 +12,7 @@ interface Props {
 
 export const ReadingScrubber = memo(function ReadingScrubber({ totalPages, initialPage, pagesHtml }: Props) {
   const book = useStore((s) => s.book!)
+  const notes = useStore((s) => s.notes)
   const focusMode = useStore((s) => s.focusMode)
 
   const trackRef = useRef<HTMLDivElement>(null)
@@ -24,6 +27,13 @@ export const ReadingScrubber = memo(function ReadingScrubber({ totalPages, initi
   const isDraggingRef = useRef(false)
   const targetPageRef = useRef(initialPage)
   const rafJumpRef = useRef(0)
+  const dragCleanupRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => {
+    return () => {
+      dragCleanupRef.current?.()
+    }
+  }, [])
 
   // Memoize chapter milestones once
   const chapters = useMemo(() => {
@@ -173,6 +183,7 @@ export const ReadingScrubber = memo(function ReadingScrubber({ totalPages, initi
 
     const onPointerUp = () => {
       isDraggingRef.current = false
+      dragCleanupRef.current = null
       window.removeEventListener('mousemove', onPointerMove)
       window.removeEventListener('mouseup', onPointerUp)
 
@@ -189,6 +200,13 @@ export const ReadingScrubber = memo(function ReadingScrubber({ totalPages, initi
           if (headerPageEl) headerPageEl.textContent = `${targetPageRef.current + 1}`
         }
       }, 120)
+    }
+
+    dragCleanupRef.current = () => {
+      isDraggingRef.current = false
+      window.removeEventListener('mousemove', onPointerMove)
+      window.removeEventListener('mouseup', onPointerUp)
+      document.body.classList.remove('flight-mode')
     }
 
     updateDrag(e.nativeEvent)
@@ -234,6 +252,21 @@ export const ReadingScrubber = memo(function ReadingScrubber({ totalPages, initi
         <span ref={hudPctRef} className="font-sans text-[11px] text-soft">
           (0%)
         </span>
+
+        {/* Motif Legend Counters */}
+        <div className="flex items-center gap-1.5 border-l border-line pl-2.5 ml-1">
+          {INKS.map((c) => {
+            const count = notes.filter((n) => n.color === c).length
+            if (count === 0) return null
+            const label = book.legend[c] || c
+            return (
+              <span key={c} className="flex items-center gap-1 text-[11px]" title={`${label}: ${count}`}>
+                <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: `rgb(var(--${c}))` }} />
+                <span className="font-mono text-soft text-[10px]">{count}</span>
+              </span>
+            )
+          })}
+        </div>
       </div>
 
       {/* Tactile Reading Ribbon Scrubber Bar */}
@@ -258,6 +291,29 @@ export const ReadingScrubber = memo(function ReadingScrubber({ totalPages, initi
               style={{ transform: 'scaleX(0)', transformOrigin: 'left center', willChange: 'transform' }}
               className="h-full w-full bg-accent/80"
             />
+          </div>
+
+          {/* Motif & Thematic Density Heatmap Ticks */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-1.5 h-1 z-10">
+            {notes.map((n) => {
+              const leftPct = totalPages > 1 ? (n.page / (totalPages - 1)) * 100 : 0
+              return (
+                <button
+                  key={n.id}
+                  type="button"
+                  style={{
+                    left: `${leftPct}%`,
+                    backgroundColor: `rgb(var(--${n.color}))`,
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    goToPage(n.page)
+                  }}
+                  className="pointer-events-auto absolute top-0 h-full w-[3px] -translate-x-1/2 opacity-75 hover:opacity-100 hover:scale-y-200 transition-all rounded-xs cursor-pointer"
+                  title={`${book.legend[n.color] || n.color}: “${n.quote.slice(0, 35)}...” (Page ${n.page + 1})`}
+                />
+              )
+            })}
           </div>
 
           {/* Chapter Milestone Dots */}

@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Copy, Check, Download, Search, MessageSquareQuote, FileText, Sparkles } from 'lucide-react'
+import { X, Copy, Check, Download, Search, MessageSquareQuote, FileText, Sparkles, Printer } from 'lucide-react'
 import { useStore } from '../store.ts'
 import { INKS, type Ink, type Style } from '../lib/db.ts'
-import { formatQuote, toMarkdown } from '../lib/text.ts'
+import { formatQuote, toMarkdown, cite, normalizeText } from '../lib/text.ts'
 import { goToPage } from './Reader.tsx'
 import { ink } from './Page.tsx'
 
@@ -18,6 +18,7 @@ export function Quotebook() {
   const [filterInk, setFilterInk] = useState<Ink | 'all'>('all')
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [showExportModal, setShowExportModal] = useState(false)
+  const [showPrintModal, setShowPrintModal] = useState(false)
   const [copiedExport, setCopiedExport] = useState(false)
 
   const activeStyle = prefs.style
@@ -29,9 +30,9 @@ export function Quotebook() {
       list = list.filter((n) => n.color === filterInk)
     }
     if (query.trim()) {
-      const q = query.toLowerCase()
+      const q = normalizeText(query)
       list = list.filter(
-        (n) => n.quote.toLowerCase().includes(q) || n.note.toLowerCase().includes(q),
+        (n) => normalizeText(n.quote).includes(q) || normalizeText(n.note).includes(q),
       )
     }
     return list
@@ -88,6 +89,14 @@ export function Quotebook() {
             <h2 className="smallcaps text-base font-semibold tracking-wider">The Quotebook</h2>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowPrintModal(true)}
+              className="flex items-center gap-1.5 rounded-sm border border-line px-2.5 py-1 text-xs text-soft transition hover:bg-paper hover:text-ink hover:border-soft"
+              title="Print 2-column Socratic Seminar cheat sheet for class"
+            >
+              <Printer size={13} strokeWidth={1.5} />
+              <span className="smallcaps font-sans">Seminar Sheet</span>
+            </button>
             <button
               onClick={() => setShowExportModal(true)}
               className="flex items-center gap-1.5 rounded-sm border border-line px-2.5 py-1 text-xs text-soft transition hover:bg-paper hover:text-ink hover:border-soft"
@@ -334,6 +343,149 @@ export function Quotebook() {
           </div>,
           document.body,
         )}
+
+      {/* Socratic Seminar Prep Sheet Modal */}
+      {showPrintModal &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs"
+            onClick={() => setShowPrintModal(false)}
+          >
+            <div
+              className="grain w-full max-w-3xl rounded-sm border border-line bg-card p-6 shadow-2xl max-h-[90vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-line pb-3 mb-4 shrink-0">
+                <div className="flex items-center gap-2">
+                  <Printer size={18} strokeWidth={1.5} className="text-accent" />
+                  <h3 className="smallcaps text-base font-semibold">Printable Socratic Seminar Prep Sheet</h3>
+                </div>
+                <button
+                  onClick={() => setShowPrintModal(false)}
+                  className="p-1 text-soft hover:text-ink cursor-pointer"
+                  aria-label="Close print preview"
+                >
+                  <X size={16} strokeWidth={1.5} />
+                </button>
+              </div>
+
+              <p className="font-serif italic text-xs text-soft mb-3 shrink-0">
+                Optimized 2-column physical handout for in-class seminars: quotes and citations on left, margin reflections and motifs on right.
+              </p>
+
+              {/* Sheet Preview Body */}
+              <div className="flex-1 overflow-y-auto border border-line bg-paper/60 p-6 rounded-sm space-y-4">
+                <div className="border-b-2 border-ink pb-3 mb-4">
+                  <div className="flex justify-between items-baseline mb-2">
+                    <h4 className="font-serif text-lg font-bold text-ink">{book.title}</h4>
+                    <span className="text-xs text-soft">by {book.author} ({book.year})</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4 text-xs text-soft border-t border-line pt-2">
+                    <div>Student: <span className="border-b border-line inline-block w-28"></span></div>
+                    <div>Date: <span className="border-b border-line inline-block w-20"></span></div>
+                    <div>Course: <span className="border-b border-line inline-block w-20"></span></div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div className="font-semibold text-soft smallcaps border-b border-line pb-1">
+                    Passage & Academic Citation ({activeStyle.toUpperCase()})
+                  </div>
+                  <div className="font-semibold text-soft smallcaps border-b border-line pb-1">
+                    Student Marginalia & Thematic Motifs
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {filtered.map((n) => (
+                    <div key={n.id} className="grid grid-cols-2 gap-4 text-xs border-b border-line/50 pb-3">
+                      <div>
+                        <blockquote className="font-serif italic text-ink mb-1">
+                          “{n.quote}”
+                        </blockquote>
+                        <span className="font-sans text-[11px] text-accent">
+                          {cite(activeStyle, book, n.page + 1).text} (p. {n.page + 1})
+                        </span>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1 text-[11px] font-sans font-medium text-soft">
+                          <span className="blot size-2" style={ink(n.color)} />
+                          <span>#{book.legend[n.color] || n.color}</span>
+                        </div>
+                        <p className="font-sans text-ink leading-relaxed">
+                          {n.note || <span className="italic text-soft/60">No additional note</span>}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center justify-between border-t border-line pt-4 shrink-0">
+                <span className="text-[11px] text-soft">
+                  {filtered.length} entries ready for print
+                </span>
+                <button
+                  onClick={() => {
+                    setShowPrintModal(false)
+                    setTimeout(() => window.print(), 100)
+                  }}
+                  className="flex items-center gap-1.5 rounded-sm bg-ink px-4 py-2 font-serif text-xs text-paper shadow-xs hover:opacity-90 transition cursor-pointer"
+                >
+                  <Printer size={14} strokeWidth={1.5} />
+                  <span>Print Seminar Handout</span>
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {/* Standalone Pure Print Layout for @media print */}
+      <div id="seminar-print-sheet" className="hidden print:block font-serif text-black p-8 bg-white">
+        <div className="border-b-2 border-black pb-4 mb-6">
+          <div className="flex justify-between items-baseline mb-2">
+            <h1 className="text-2xl font-bold">{book.title}</h1>
+            <span className="text-sm">by {book.author} ({book.year})</span>
+          </div>
+          <div className="text-xs uppercase tracking-wider text-gray-600 mb-4">
+            Inkling Literature Sanctuary — Socratic Seminar Evidence Sheet
+          </div>
+          <div className="grid grid-cols-3 gap-6 text-sm border-t border-gray-300 pt-3">
+            <div>Student Name: ___________________________</div>
+            <div>Date: _______________</div>
+            <div>Period / Section: ___________</div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-6 text-xs font-bold uppercase tracking-wider border-b-2 border-black pb-2 mb-4">
+          <div>Primary Evidence & Academic Citation ({activeStyle.toUpperCase()})</div>
+          <div>Student Analysis & Thematic Motifs</div>
+        </div>
+
+        <div className="space-y-4">
+          {filtered.map((n) => (
+            <div key={n.id} className="grid grid-cols-2 gap-6 text-sm border-b border-gray-200 pb-4 break-inside-avoid">
+              <div>
+                <blockquote className="italic mb-1.5 leading-relaxed">
+                  “{n.quote}”
+                </blockquote>
+                <div className="text-xs text-gray-700 font-sans">
+                  {cite(activeStyle, book, n.page + 1).text} (Page {n.page + 1})
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-bold text-gray-800 mb-1">
+                  Motif: #{book.legend[n.color] || n.color}
+                </div>
+                <div className="text-sm leading-relaxed text-gray-900">
+                  {n.note || '—'}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </>
   )
 }

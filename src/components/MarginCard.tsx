@@ -25,6 +25,9 @@ export const MarginCard = memo(function MarginCard({ note, isDisplaced, onHover 
   const saveTimeoutRef = useRef<number>(0)
   const [isEditing, setIsEditing] = useState(false)
   const [comment, setComment] = useState(note.note)
+  const commentRef = useRef(comment)
+  commentRef.current = comment
+  const isDirtyRef = useRef(false)
 
   useEffect(() => {
     if (focusId === note.id && textareaRef.current) {
@@ -34,34 +37,48 @@ export const MarginCard = memo(function MarginCard({ note, isDisplaced, onHover 
 
   useEffect(() => {
     setComment(note.note)
+    commentRef.current = note.note
+    isDirtyRef.current = false
   }, [note.note])
 
-  // Debounced auto-save (350ms) to eliminate typing lag
+  const commitNow = useCallback(() => {
+    window.clearTimeout(saveTimeoutRef.current)
+    if (isDirtyRef.current && commentRef.current !== note.note) {
+      isDirtyRef.current = false
+      updateNote(note.id, { note: commentRef.current.trim() })
+    }
+  }, [note.id, note.note, updateNote])
+
+  // Debounced auto-save (350ms) with guaranteed commit on unmount/blur/pagehide
   const handleCommentChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const next = e.target.value
       setComment(next)
+      commentRef.current = next
+      isDirtyRef.current = true
       window.clearTimeout(saveTimeoutRef.current)
       saveTimeoutRef.current = window.setTimeout(() => {
-        if (next !== note.note) {
-          updateNote(note.id, { note: next.trim() })
-        }
+        commitNow()
       }, 350)
     },
-    [note.id, note.note, updateNote],
+    [commitNow],
   )
 
   const handleBlur = useCallback(() => {
     setIsEditing(false)
-    window.clearTimeout(saveTimeoutRef.current)
-    if (comment !== note.note) {
-      updateNote(note.id, { note: comment.trim() })
-    }
-  }, [comment, note.id, note.note, updateNote])
+    commitNow()
+  }, [commitNow])
 
   useEffect(() => {
-    return () => window.clearTimeout(saveTimeoutRef.current)
-  }, [])
+    const onFlush = () => commitNow()
+    window.addEventListener('beforeunload', onFlush)
+    document.addEventListener('visibilitychange', onFlush)
+    return () => {
+      commitNow()
+      window.removeEventListener('beforeunload', onFlush)
+      document.removeEventListener('visibilitychange', onFlush)
+    }
+  }, [commitNow])
 
   const KindIcon = KIND_ICONS[note.kind]
   const isSticky = note.kind === 'note'
