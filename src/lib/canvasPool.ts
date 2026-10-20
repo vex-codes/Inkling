@@ -1,11 +1,13 @@
 /**
  * Memory-Safe PDF Page Rendering Pool
- * Capped at MAX_ACTIVE_CANVASES (default 4) to prevent GPU texture bloat and WebKit crashes.
+ * Capped at MAX_ACTIVE_CANVASES = 3 to prevent GPU texture bloat and WebKit crashes.
  * Automatically evicts and releases the canvas farthest from the current viewport.
  */
 export class CanvasMemoryPool {
-  private static MAX_ACTIVE_CANVASES = 4
+  private static MAX_ACTIVE_CANVASES = 3
   private activeCanvases = new Map<number, HTMLCanvasElement>()
+  private renderTasks = new Map<number, { cancel: () => void }>()
+  private pdfPages = new Map<number, { cleanup?: () => void; destroy?: () => void }>()
 
   private findFurthestPage(targetPage: number): number {
     let furthestPage = -1
@@ -36,11 +38,41 @@ export class CanvasMemoryPool {
     return canvas
   }
 
+  public registerTask(pageNumber: number, task: { cancel: () => void }): void {
+    this.renderTasks.set(pageNumber, task)
+  }
+
+  public registerPdfPage(pageNumber: number, page: { cleanup?: () => void; destroy?: () => void }): void {
+    this.pdfPages.set(pageNumber, page)
+  }
+
   public release(pageNumber: number): void {
+    const task = this.renderTasks.get(pageNumber)
+    if (task) {
+      try {
+        task.cancel()
+      } catch {
+        // ignore
+      }
+      this.renderTasks.delete(pageNumber)
+    }
+
+    const page = this.pdfPages.get(pageNumber)
+    if (page) {
+      try {
+        page.cleanup?.()
+        page.destroy?.()
+      } catch {
+        // ignore
+      }
+      this.pdfPages.delete(pageNumber)
+    }
+
     const canvas = this.activeCanvases.get(pageNumber)
     if (canvas) {
-      canvas.width = 1
-      canvas.height = 1 // Release GPU memory instantly
+      // Reset dimensions to 0 to force WebKit/Blink to instantly deallocate the GPU backbuffer
+      canvas.width = 0
+      canvas.height = 0
       canvas.remove()
       this.activeCanvases.delete(pageNumber)
     }
