@@ -10,6 +10,12 @@ export type Style = 'mla' | 'apa' | 'chicago'
 
 export interface Flag { id: string; page: number; color: Ink; label: string }
 
+export interface TocItem {
+  title: string
+  page: number
+  href?: string
+}
+
 /** Light metadata row — shelf lists these without touching page content. */
 export interface Book {
   id: string
@@ -26,6 +32,7 @@ export interface Book {
   flags: Flag[]
   legend: Record<Ink, string>
   prunedPages?: number[] // Phase 4: Non-destructive page exclusion layer
+  toc?: TocItem[]
 }
 
 export interface Content { id: string; pages: string[] }

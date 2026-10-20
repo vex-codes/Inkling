@@ -268,7 +268,7 @@ export const useStore = create<State>()((set, get) => {
 
     async addBook(file) {
       signalSave()
-      const { pages, prunedPages, ...meta } = await ingest(file)
+      const { pages, prunedPages, toc, ...meta } = await ingest(file)
       const book: Book = {
         ...meta,
         id: uid(),
@@ -278,6 +278,7 @@ export const useStore = create<State>()((set, get) => {
         flags: [],
         legend: { ...DEFAULT_LEGEND },
         prunedPages: prunedPages ?? [],
+        toc: toc ?? [],
       }
       await db.transaction('rw', db.books, db.contents, async () => {
         await db.books.put(book)

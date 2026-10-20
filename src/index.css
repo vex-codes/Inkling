@@ -183,23 +183,54 @@ body {
 }
 
 /* ── Prose ─────────────────────────────────────────────────────────────────── */
+/* ── Prose (Apple Books Typography & Isolated Component Render) ──────────── */
 .prose-ink {
+  contain: layout style;
   font-family: var(--read-font); font-size: var(--read-size); line-height: var(--read-leading);
   width: calc(var(--read-measure) * 1ch); max-width: 720px;
   hyphens: auto; text-wrap: pretty; font-variant-numeric: oldstyle-nums; font-kerning: normal;
   transition: font-size .25s ease;
 }
-.prose-ink p { margin: 0; text-indent: 1.5em; text-align: justify; }
+.prose-ink p { margin: 0; margin-bottom: 0; text-indent: 1.5em; text-align: justify; }
 .prose-ink :is(h2, blockquote) + p, .prose-ink > p:first-child { text-indent: 0; }
 .prose-ink h2 {
   margin: 1.5em 0 1.75em; text-align: center; font-weight: 400; font-size: 1.15em;
   font-variant: all-small-caps; letter-spacing: .22em; color: var(--accent);
 }
 .prose-ink h2::after { content: "❦"; display: block; margin-top: .4em; font-size: .9em; letter-spacing: 0; opacity: .6; }
-.prose-ink h2 + p::first-letter {
-  float: left; font-size: 3.6em; line-height: .82; padding: .06em .08em 0 0; color: var(--accent); font-weight: 500;
+
+/* Apple Books Style Drop Caps on chapter openings */
+.prose-ink h2 + p::first-letter,
+.prose-ink > p:first-of-type::first-letter {
+  float: left;
+  font-family: var(--read-font), serif;
+  font-size: 3.2em;
+  line-height: 0.8;
+  padding: 4px 8px 0 0;
+  color: var(--accent);
+  font-weight: 600;
 }
-.prose-ink blockquote { margin: 1em 1.5em; font-style: italic; }
+
+/* Styled Academic Callouts & Blockquotes */
+.prose-ink blockquote,
+.prose-ink .academic-callout {
+  margin: 1.25em 1.5em;
+  padding: 0.5em 1em;
+  border-left: 2px solid var(--accent);
+  background: rgb(var(--shade) / 0.02);
+  font-style: italic;
+  text-indent: 0;
+  opacity: 0.95;
+}
+
+.prose-ink .academic-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.88em;
+  padding: 0.15em 0.35em;
+  border-radius: 3px;
+  background: rgb(var(--shade) / 0.06);
+  border: 1px solid var(--line);
+}
 
 /* ── Ink layers (CSS Custom Highlight API) ─────────────────────────────────── */
 ::highlight(wash-ochre)  { background-color: rgb(207 155 52 / .34); }

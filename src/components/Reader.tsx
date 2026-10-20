@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState, type CSSProperties } from 'react'
-import { Library, NotebookPen, Feather, Maximize2, Minimize2, Columns2, Link2, Unlink2, Trash2, X, FileText } from 'lucide-react'
+import { Library, NotebookPen, Feather, Maximize2, Minimize2, Columns2, Link2, Unlink2, Trash2, X, FileText, Bookmark } from 'lucide-react'
 import { useStore } from '../store.ts'
 import { Page } from './Page.tsx'
 import { SelectionPopover } from './SelectionPopover.tsx'
@@ -115,6 +115,7 @@ export function Reader() {
   const [current] = useState(book.page)
   const currentRef = useRef(book.page)
   const lastTurnTimeRef = useRef(0)
+  const [showTocModal, setShowTocModal] = useState(false)
 
   // Strict 3-page virtual viewport window center
   const [activeWindowCenter, setActiveWindowCenter] = useState(book.page || 0)
@@ -249,6 +250,17 @@ export function Reader() {
         >
           <Library size={18} strokeWidth={1.5} />
         </button>
+
+        {book.toc && book.toc.length > 0 && (
+          <button
+            onClick={() => setShowTocModal(true)}
+            className="grid size-9 place-items-center rounded-md text-soft transition hover:bg-line hover:text-ink focus-visible:bg-line"
+            aria-label="Table of Contents"
+            title="Table of Contents"
+          >
+            <Bookmark size={18} strokeWidth={1.5} />
+          </button>
+        )}
 
         <div className="min-w-0 flex-1 text-center">
           <h1 className="truncate text-base italic leading-tight font-serif">{book.title}</h1>
@@ -530,6 +542,56 @@ export function Reader() {
                 className="rounded bg-ink px-4 py-1.5 text-xs text-paper font-sans cursor-pointer"
               >
                 Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Table of Contents Instant Nav Modal */}
+      {showTocModal && book.toc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/20 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="grain w-full max-w-md rounded-sm border border-line bg-card p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <div>
+                <h3 className="font-serif italic font-semibold text-base">Table of Contents</h3>
+                <p className="text-xs text-soft">Instant O(1) chapter navigation</p>
+              </div>
+              <button
+                onClick={() => setShowTocModal(false)}
+                className="text-soft hover:text-ink cursor-pointer p-1"
+                aria-label="Close"
+              >
+                <X size={18} strokeWidth={1.5} />
+              </button>
+            </div>
+
+            <div className="max-h-80 overflow-y-auto space-y-1 pr-1">
+              {book.toc.map((item, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => {
+                    goToPage(item.page, 'instant')
+                    setShowTocModal(false)
+                  }}
+                  className="w-full flex items-center justify-between gap-3 rounded p-2.5 text-left text-xs transition hover:bg-paper cursor-pointer group"
+                >
+                  <span className="font-serif text-ink group-hover:text-accent font-medium truncate">
+                    {item.title}
+                  </span>
+                  <span className="smallcaps text-soft shrink-0">
+                    Page {item.page + 1}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex justify-end border-t border-line pt-3">
+              <button
+                onClick={() => setShowTocModal(false)}
+                className="rounded bg-ink px-4 py-1.5 text-xs text-paper font-sans cursor-pointer"
+              >
+                Close
               </button>
             </div>
           </div>
