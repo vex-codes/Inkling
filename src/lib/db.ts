@@ -11,9 +11,13 @@ export type Style = 'mla' | 'apa' | 'chicago'
 export interface Flag { id: string; page: number; color: Ink; label: string }
 
 export interface TocItem {
+  id?: string
   title: string
   page: number
+  pageNumber?: number
   href?: string
+  level?: number
+  children?: any[]
 }
 
 /** Light metadata row — shelf lists these without touching page content. */

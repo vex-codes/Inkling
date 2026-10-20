@@ -89,6 +89,18 @@ console.log(`✓ Crucible: 1,000 annotations stacked in ${elapsedStack.toFixed(2
 assert.equal(normalizeText('“The Waste Land” — T.S. Eliot'), '"the waste land" - t.s. eliot')
 assert.equal(normalizeText("Macbeth’s ‘fatal vision’"), "macbeth's 'fatal vision'")
 assert.ok(normalizeText('“Green Light”').includes(normalizeText('"green light"')))
-console.log('✓ Academic typographic quote & dash normalization passed.')
+// 8. Hierarchical Table of Contents & Synthetic Page Numbering Test
+import { extractTocFromPages } from '../services/tocExtractor.ts'
+const testPages = [
+  '<h2>Titlepage</h2><p>Cover leaf</p>',
+  '<h2>Preface</h2><p>The event on which this fiction is founded has been supposed...</p>',
+  '<h2>Frankenstein</h2><p>Letter I</p>',
+]
+const extracted = extractTocFromPages(testPages)
+assert.equal(extracted.length, 3)
+assert.equal(extracted[0].title, 'Titlepage')
+assert.equal(extracted[1].title, 'Preface')
+assert.equal(extracted[2].title, 'Frankenstein')
+console.log('✓ Hierarchical Table of Contents extraction verified.')
 
 console.log('✓ All unit and stress-test assertions passed cleanly.')

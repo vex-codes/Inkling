@@ -137,6 +137,8 @@ function extractSanitizedBlocks(root: Element): string[] {
       const t = c.localName.toLowerCase()
       if (t === 'script' || t === 'style' || t === 'link' || t === 'meta') continue
 
+      const idAttr = c.id ? ` id="${c.id}"` : ''
+
       if (t === 'hr') {
         out.push('<hr class="scene-divider" />')
         continue
@@ -145,7 +147,7 @@ function extractSanitizedBlocks(root: Element): string[] {
       if (t[0] === 'h' && t.length === 2) {
         const text = cleanInline(c).trim()
         if (text) {
-          out.push(`<h2>${text}</h2>`)
+          out.push(`<h2${idAttr}>${text}</h2>`)
           isFirstParagraph = true
         }
         continue
@@ -154,7 +156,7 @@ function extractSanitizedBlocks(root: Element): string[] {
       if (t === 'blockquote') {
         const text = cleanInline(c).trim()
         if (text) {
-          out.push(`<blockquote class="academic-callout">${text}</blockquote>`)
+          out.push(`<blockquote${idAttr} class="academic-callout">${text}</blockquote>`)
         }
         continue
       }
@@ -163,7 +165,7 @@ function extractSanitizedBlocks(root: Element): string[] {
         const text = cleanInline(c).trim()
         if (text) {
           const cls = isFirstParagraph ? ' class="chapter-open"' : ''
-          out.push(`<p${cls}>${text}</p>`)
+          out.push(`<p${idAttr}${cls}>${text}</p>`)
           isFirstParagraph = false
         }
         continue
@@ -177,7 +179,7 @@ function extractSanitizedBlocks(root: Element): string[] {
           const text = cleanInline(c).trim()
           if (text) {
             const cls = isFirstParagraph ? ' class="chapter-open"' : ''
-            out.push(`<p${cls}>${text}</p>`)
+            out.push(`<p${idAttr}${cls}>${text}</p>`)
             isFirstParagraph = false
           }
         }
@@ -189,7 +191,7 @@ function extractSanitizedBlocks(root: Element): string[] {
       } else {
         const text = cleanInline(c).trim()
         if (text) {
-          out.push(`<p>${text}</p>`)
+          out.push(`<p${idAttr}>${text}</p>`)
         }
       }
     }
@@ -235,7 +237,7 @@ async function fromEpub(file: File): Promise<{ pages: string[]; meta: Partial<Bo
 
   for (const { blocks } of spineSections) {
     const sectionWords = blocks.reduce((sum, b) => sum + countWords(b), 0)
-    const hasMajorHeading = blocks.some((b) => b.startsWith('<h2>'))
+    const hasMajorHeading = blocks.some((b) => b.startsWith('<h2'))
 
     // Break to a new chapter ONLY if we already have an established chapter with content (>80 words)
     // AND this new section starts with a major heading
@@ -256,24 +258,8 @@ async function fromEpub(file: File): Promise<{ pages: string[]; meta: Partial<Bo
   // 3. Paginate chapters with comfortable book page capacity (420 words per page)
   const pages = paginate(chapters.filter((c) => c.length > 0), 420)
 
-  // 4. Map spine hrefs to page numbers for accurate TOC
-  const sectionPageMap = new Map<string, number>()
-  for (const { href, blocks } of spineSections) {
-    if (href && blocks.length > 0) {
-      const clean = href.split('#')[0]
-      const base = clean.split('/').pop() || clean
-      const searchSnippet = blocks[0].replace(/<[^>]+>/g, '').trim().slice(0, 40)
-      if (searchSnippet) {
-        const found = pages.findIndex((p) => p.includes(searchSnippet))
-        if (found !== -1) {
-          sectionPageMap.set(clean, found)
-          sectionPageMap.set(base, found)
-        }
-      }
-    }
-  }
-
-  const toc = await extractTocFromEpubBook(book, pages, sectionPageMap)
+  // 4. Extract hierarchical recursive Table of Contents with genuine calculated page numbers
+  const toc = await extractTocFromEpubBook(book, pages, spineSections)
   book.destroy()
 
   return {

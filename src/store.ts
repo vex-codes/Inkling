@@ -384,7 +384,7 @@ export const useStore = create<State>()((set, get) => {
         books: get().books.map((b) => (b.id === id ? { ...b, ...patch } : b)),
         book: get().book?.id === id ? { ...get().book!, ...patch } : get().book,
       })
-      persist(db.books.update(id, patch))
+      persist(db.books.update(id, patch as any))
     },
 
     async reseedSample() {

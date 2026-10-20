@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { Library, NotebookPen, Feather, Maximize2, Minimize2, Columns2, Link2, Unlink2, Trash2, X, FileText, Bookmark, BookOpen } from 'lucide-react'
+import { Library, NotebookPen, Feather, Maximize2, Minimize2, Columns2, Link2, Unlink2, Trash2, X, FileText, BookOpen } from 'lucide-react'
 import { useStore } from '../store.ts'
 import { Page } from './Page.tsx'
 import { SelectionPopover } from './SelectionPopover.tsx'
@@ -72,6 +72,8 @@ export function Reader() {
 
   useEffect(() => {
     let ticking = false
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
     const onScroll = () => {
       if (ticking) return
       ticking = true
@@ -95,12 +97,20 @@ export function Reader() {
           currentRef.current = activePage
           const headerEl = document.getElementById('header-current-page')
           if (headerEl) headerEl.textContent = `${activePage + 1}`
+
+          if (debounceTimer) clearTimeout(debounceTimer)
+          debounceTimer = setTimeout(() => {
+            useStore.getState().updateBook({ page: activePage })
+          }, 150)
         }
       })
     }
 
     window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      if (debounceTimer) clearTimeout(debounceTimer)
+    }
   }, [pages.length])
 
   // Reopen where the reader left off
@@ -203,16 +213,17 @@ export function Reader() {
           <Library size={18} strokeWidth={1.5} />
         </button>
 
-        {book.toc && book.toc.length > 0 && (
-          <button
-            onClick={() => toggleChapterDrawer(true)}
-            className="grid size-9 place-items-center rounded-md text-soft transition hover:bg-line hover:text-ink focus-visible:bg-line"
-            aria-label="Table of Contents (⌘B)"
-            title="Table of Contents (⌘B)"
-          >
-            <Bookmark size={18} strokeWidth={1.5} />
-          </button>
-        )}
+        <button
+          onClick={() => toggleChapterDrawer()}
+          className={`grid size-9 place-items-center rounded-md transition ${
+            chapterDrawer ? 'bg-line text-accent font-semibold' : 'text-soft hover:bg-line hover:text-ink focus-visible:bg-line'
+          }`}
+          aria-pressed={chapterDrawer}
+          aria-label="Table of Contents (⌘B)"
+          title="Table of Contents  ⌘B"
+        >
+          <BookOpen size={18} strokeWidth={1.5} />
+        </button>
 
         <div className="min-w-0 flex-1 text-center">
           <h1 className="truncate text-base italic leading-tight font-serif">{book.title}</h1>
@@ -243,18 +254,6 @@ export function Reader() {
         </div>
 
         <div className="flex items-center gap-1.5">
-          {/* Chapter / Table of Contents Drawer button (Apple Books parity) */}
-          <button
-            onClick={() => toggleChapterDrawer()}
-            className={`grid size-9 place-items-center rounded-md transition ${
-              chapterDrawer ? 'bg-line text-accent font-semibold' : 'text-soft hover:bg-line hover:text-ink focus-visible:bg-line'
-            }`}
-            aria-pressed={chapterDrawer}
-            aria-label="Table of Contents (⌘B)"
-            title="Table of Contents  ⌘B"
-          >
-            <BookOpen size={18} strokeWidth={1.5} />
-          </button>
 
           {/* Comparative Split-View button */}
           <button

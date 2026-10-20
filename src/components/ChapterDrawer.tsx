@@ -1,8 +1,108 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { X, BookOpen, Check, Search, BookmarkCheck } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { X, Search, ChevronRight, ChevronDown } from 'lucide-react'
 import { useStore } from '../store.ts'
 import { extractTocFromPages, type DetailedTocItem } from '../services/tocExtractor.ts'
 import { goToPage } from './Reader.tsx'
+
+interface TocRowProps {
+  item: DetailedTocItem
+  level: number
+  activeId: string | null
+  expandedIds: Set<string>
+  onToggleExpand: (id: string, e: React.MouseEvent) => void
+  onSelect: (item: DetailedTocItem) => void
+  activeItemRef?: React.RefObject<HTMLButtonElement | null>
+}
+
+function TocRow({
+  item,
+  level,
+  activeId,
+  expandedIds,
+  onToggleExpand,
+  onSelect,
+  activeItemRef,
+}: TocRowProps) {
+  const itemId = item.id || `${item.page}:${item.title}`
+  const hasChildren = Boolean(item.children && item.children.length > 0)
+  const isExpanded = expandedIds.has(itemId)
+  const isActive = activeId === itemId
+
+  // Indentation: root level at 0.75rem, children indented 1.25rem per level
+  const indentRem = (level - 1) * 1.25 + 0.75
+  const isTopLevel = level === 1
+
+  return (
+    <div>
+      <button
+        ref={isActive ? (activeItemRef as any) : undefined}
+        onClick={() => onSelect(item)}
+        className={`group relative w-full flex items-center justify-between gap-2 rounded-md px-3 py-2 text-left transition-colors cursor-pointer border-0 select-none ${
+          isActive
+            ? 'bg-accent/15 text-accent font-medium'
+            : isTopLevel
+            ? 'text-ink hover:bg-line/20 font-medium'
+            : 'text-soft hover:text-ink hover:bg-line/20 font-normal'
+        }`}
+        style={{ paddingLeft: `${indentRem}rem` }}
+      >
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          {hasChildren ? (
+            <span
+              onClick={(e) => onToggleExpand(itemId, e)}
+              className="grid size-5 place-items-center rounded text-soft/70 hover:text-ink hover:bg-line/30 transition-colors shrink-0 -ml-1"
+              role="button"
+              aria-label={isExpanded ? 'Collapse section' : 'Expand section'}
+            >
+              {isExpanded ? (
+                <ChevronDown size={14} strokeWidth={2} />
+              ) : (
+                <ChevronRight size={14} strokeWidth={2} />
+              )}
+            </span>
+          ) : (
+            <span className="w-4 shrink-0" />
+          )}
+
+          <span
+            className={`truncate font-serif text-[14px] leading-snug tracking-tight ${
+              isTopLevel ? 'font-medium' : 'text-[13.5px]'
+            } ${isActive ? 'text-accent font-semibold' : ''}`}
+          >
+            {item.title}
+          </span>
+        </div>
+
+        {/* Right-aligned plain muted page number (Apple Books parity: no "P. " prefix) */}
+        <span
+          className={`shrink-0 font-sans tabular-nums text-[12px] tracking-tight ml-2 ${
+            isActive ? 'text-accent font-medium' : 'text-soft/70 group-hover:text-soft'
+          }`}
+        >
+          {item.pageNumber ?? item.page + 1}
+        </span>
+      </button>
+
+      {/* Nested Children */}
+      {hasChildren && isExpanded && (
+        <div className="relative">
+          {item.children!.map((child) => (
+            <TocRow
+              key={child.id || `${child.page}:${child.title}`}
+              item={child}
+              level={level + 1}
+              activeId={activeId}
+              expandedIds={expandedIds}
+              onToggleExpand={onToggleExpand}
+              onSelect={onSelect}
+              activeItemRef={activeItemRef}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export function ChapterDrawer() {
   const chapterDrawer = useStore((s) => s.chapterDrawer)
@@ -11,43 +111,124 @@ export function ChapterDrawer() {
   const { toggleChapterDrawer, updateBook } = useStore.getState()
 
   const [query, setQuery] = useState('')
-  const activeItemRef = useRef<HTMLButtonElement>(null)
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
+  const activeItemRef = useRef<HTMLButtonElement | null>(null)
 
-  // Current page derived from book.page
+  // Current reader page
   const currentPage = book?.page ?? 0
 
-  // Ensure TOC exists, extracting from pages if needed
-  const tocItems: DetailedTocItem[] = useMemo(() => {
+  // 1. Ensure hierarchical TOC items exist
+  const tocTree: DetailedTocItem[] = useMemo(() => {
     if (!book) return []
-    if (book.toc && book.toc.length > 0) {
+    const hasChildren = book.toc?.some((t) => t.children && t.children.length > 0)
+    if (book.toc && book.toc.length > 0 && (hasChildren || book.toc.length > 12)) {
       return book.toc
     }
     if (pages.length > 0) {
       const extracted = extractTocFromPages(pages)
       if (extracted.length > 0) {
-        // Cache to book in background
-        setTimeout(() => updateBook({ toc: extracted }), 50)
+        setTimeout(() => updateBook({ toc: extracted }), 60)
+        return extracted
       }
-      return extracted
     }
-    return []
+    return book.toc || []
   }, [book, pages, updateBook])
 
-  const filtered = useMemo(() => {
-    if (!query.trim()) return tocItems
-    const q = query.toLowerCase()
-    return tocItems.filter((item) => item.title.toLowerCase().includes(q))
-  }, [tocItems, query])
+  // 2. Flatten tree in depth-first order to find active reading item and handle search
+  const flattenedWithParents = useMemo(() => {
+    const list: { item: DetailedTocItem; parentIds: string[] }[] = []
+    const walk = (nodes: DetailedTocItem[], parents: string[]) => {
+      for (const node of nodes) {
+        const id = node.id || `${node.page}:${node.title}`
+        list.push({ item: node, parentIds: parents })
+        if (node.children && node.children.length > 0) {
+          walk(node.children, [...parents, id])
+        }
+      }
+    }
+    walk(tocTree, [])
+    return list
+  }, [tocTree])
 
-  // Scroll active chapter into view when opening drawer
+  // 3. Find active item ID based on currentPage
+  const { activeId, activeParentIds } = useMemo(() => {
+    if (flattenedWithParents.length === 0) {
+      return { activeId: null, activeParentIds: [] }
+    }
+
+    // Find the last item whose starting page is <= currentPage
+    let activeEntry = flattenedWithParents[0]
+    for (const entry of flattenedWithParents) {
+      if (entry.item.page <= currentPage) {
+        activeEntry = entry
+      } else {
+        break
+      }
+    }
+
+    const id = activeEntry.item.id || `${activeEntry.item.page}:${activeEntry.item.title}`
+    return { activeId: id, activeParentIds: activeEntry.parentIds }
+  }, [flattenedWithParents, currentPage])
+
+  // 4. Automatically expand active branch when reading or opening drawer
+  useEffect(() => {
+    if (activeParentIds.length > 0) {
+      setExpandedIds((prev) => {
+        let changed = false
+        const next = new Set(prev)
+        for (const pid of activeParentIds) {
+          if (!next.has(pid)) {
+            next.add(pid)
+            changed = true
+          }
+        }
+        return changed ? next : prev
+      })
+    }
+  }, [activeParentIds])
+
+  // 5. Scroll active chapter into view when opening drawer
   useEffect(() => {
     if (chapterDrawer) {
       const timer = setTimeout(() => {
         activeItemRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-      }, 100)
+      }, 120)
       return () => clearTimeout(timer)
     }
   }, [chapterDrawer])
+
+  const toggleExpand = useCallback((id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }, [])
+
+  const handleSelect = useCallback(
+    (item: DetailedTocItem) => {
+      goToPage(item.page, 'instant')
+      updateBook({ page: item.page })
+      if (window.innerWidth < 768) {
+        toggleChapterDrawer(false)
+      }
+    },
+    [updateBook, toggleChapterDrawer]
+  )
+
+  // 6. Search filtering: if query is present, show matching flat list
+  const searchResults = useMemo(() => {
+    if (!query.trim()) return null
+    const q = query.toLowerCase()
+    return flattenedWithParents
+      .filter(({ item }) => item.title.toLowerCase().includes(q))
+      .map(({ item }) => item)
+  }, [query, flattenedWithParents])
 
   if (!book) return null
 
@@ -56,131 +237,121 @@ export function ChapterDrawer() {
       {/* Click-outside backdrop */}
       <div
         onClick={() => toggleChapterDrawer(false)}
-        className={`fixed inset-0 z-30 bg-ink/15 backdrop-blur-xs transition-opacity duration-300 ${
+        className={`fixed inset-0 z-40 bg-ink/20 backdrop-blur-xs transition-opacity duration-300 ${
           chapterDrawer ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
         aria-hidden="true"
       />
 
-      {/* Left slide-out drawer (Apple Books parity) */}
+      {/* Slide-out drawer matching Apple Books */}
       <aside
         role="dialog"
         aria-label="Table of Contents"
-        className={`grain fixed inset-y-0 left-0 z-40 flex w-full max-w-[min(380px,85vw)] min-h-dvh flex-col border-r border-line bg-card/95 backdrop-blur-md shadow-2xl transition-transform duration-300 ease-out will-change-transform ${
+        className={`grain fixed inset-y-0 left-0 z-50 flex w-full max-w-[min(360px,85vw)] min-h-dvh flex-col border-r border-line bg-card/95 backdrop-blur-md shadow-2xl transition-transform duration-300 ease-out will-change-transform ${
           chapterDrawer ? 'translate-x-0 pointer-events-auto' : '-translate-x-full pointer-events-none'
         }`}
       >
-        {/* Drawer Header */}
-        <div className="flex items-center justify-between border-b border-line px-6 py-4">
-          <div className="flex items-center gap-2.5">
-            <BookOpen size={18} strokeWidth={1.5} className="text-accent" />
-            <div>
-              <h2 className="smallcaps text-base font-semibold tracking-wider">Contents</h2>
-              <p className="font-serif italic text-xs text-soft truncate max-w-[200px]">
-                {book.title}
-              </p>
-            </div>
+        {/* Drawer Header (Apple Books clean typography) */}
+        <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
+          <div className="min-w-0 flex-1 pr-3">
+            <h2 className="font-serif text-[17px] font-semibold tracking-tight text-ink">
+              Table of Contents
+            </h2>
+            <p className="truncate font-serif italic text-xs text-soft">
+              {book.title}
+            </p>
           </div>
+
           <button
             onClick={() => toggleChapterDrawer(false)}
-            className="p-1.5 text-soft transition hover:text-ink hover:bg-line/40 rounded-sm cursor-pointer"
+            className="grid size-8 place-items-center rounded-md text-soft transition hover:bg-line/30 hover:text-ink cursor-pointer shrink-0"
             aria-label="Close Table of Contents (⌘B)"
             title="Close  ⌘B"
           >
-            <X size={18} strokeWidth={1.5} />
+            <X size={17} strokeWidth={1.5} />
           </button>
         </div>
 
-        {/* Quick Search for dense / multi-chapter publications */}
-        {tocItems.length > 8 && (
-          <div className="border-b border-line bg-paper/40 px-5 py-2.5">
+        {/* Quick Search */}
+        {flattenedWithParents.length > 8 && (
+          <div className="border-b border-line/70 bg-paper/40 px-4 py-2">
             <div className="relative flex items-center">
-              <Search size={14} strokeWidth={1.5} className="absolute left-3 text-soft pointer-events-none" />
+              <Search size={13} strokeWidth={1.5} className="absolute left-2.5 text-soft pointer-events-none" />
               <input
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Find chapter or section..."
-                className="w-full rounded border border-line bg-card py-1.5 pl-8 pr-3 font-serif text-xs text-ink placeholder:text-soft/60 outline-none focus:border-accent"
+                className="w-full rounded-md border border-line/80 bg-card py-1.5 pl-8 pr-7 font-serif text-xs text-ink placeholder:text-soft/60 outline-none focus:border-accent"
               />
               {query && (
                 <button
                   onClick={() => setQuery('')}
-                  className="absolute right-2.5 text-xs text-soft hover:text-ink cursor-pointer"
+                  className="absolute right-2 text-xs text-soft hover:text-ink cursor-pointer"
                 >
-                  <X size={12} />
+                  <X size={13} />
                 </button>
               )}
             </div>
           </div>
         )}
 
-        {/* Chapter List */}
-        <nav className="flex-1 overflow-y-auto px-4 py-3 space-y-1">
-          {filtered.length === 0 ? (
+        {/* Chapters Navigation Tree */}
+        <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
+          {searchResults ? (
+            searchResults.length === 0 ? (
+              <div className="py-12 text-center font-serif italic text-xs text-soft">
+                No matching chapters found.
+              </div>
+            ) : (
+              searchResults.map((item) => {
+                const itemId = item.id || `${item.page}:${item.title}`
+                const isActive = activeId === itemId
+                return (
+                  <button
+                    key={itemId}
+                    onClick={() => handleSelect(item)}
+                    className={`w-full flex items-center justify-between gap-2 rounded-md px-3 py-2 text-left transition-colors cursor-pointer border-0 ${
+                      isActive
+                        ? 'bg-accent/15 text-accent font-medium'
+                        : 'text-ink hover:bg-line/20'
+                    }`}
+                  >
+                    <span className="truncate font-serif text-[13.5px]">{item.title}</span>
+                    <span className="font-sans tabular-nums text-[12px] text-soft shrink-0">
+                      {item.pageNumber ?? item.page + 1}
+                    </span>
+                  </button>
+                )
+              })
+            )
+          ) : tocTree.length === 0 ? (
             <div className="py-12 text-center font-serif italic text-xs text-soft">
-              {query ? 'No matching chapters found.' : 'No chapter divisions detected.'}
+              No chapter divisions detected.
             </div>
           ) : (
-            filtered.map((item, idx) => {
-              // Find next chapter to determine active reading range
-              const nextItem = tocItems[idx + 1]
-              const isCurrent =
-                currentPage >= item.page && (nextItem ? currentPage < nextItem.page : true)
-              const isReadPast = nextItem ? currentPage >= nextItem.page : currentPage > item.page
-
-              return (
-                <button
-                  key={`${item.page}:${item.title}:${idx}`}
-                  ref={isCurrent ? activeItemRef : undefined}
-                  onClick={() => {
-                    goToPage(item.page, 'instant')
-                    if (window.innerWidth < 768) {
-                      toggleChapterDrawer(false)
-                    }
-                  }}
-                  className={`group relative w-full flex items-center justify-between gap-3 rounded-sm px-3.5 py-2.5 text-left text-xs transition-colors cursor-pointer ${
-                    isCurrent
-                      ? 'bg-accent/10 border border-accent/25 text-accent font-semibold shadow-xs'
-                      : 'hover:bg-paper/80 text-ink/90 border border-transparent'
-                  }`}
-                  style={{
-                    paddingLeft: item.level && item.level > 1 ? `${(item.level - 1) * 1.2 + 0.875}rem` : '0.875rem',
-                  }}
-                >
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    {isCurrent ? (
-                      <BookmarkCheck size={14} strokeWidth={2} className="shrink-0 text-accent animate-pulse" />
-                    ) : isReadPast ? (
-                      <Check size={12} strokeWidth={2} className="shrink-0 text-soft/50" />
-                    ) : (
-                      <span className="shrink-0 size-1.5 rounded-full bg-line/60" />
-                    )}
-                    <span
-                      className={`truncate font-serif text-[13px] ${
-                        isCurrent ? 'text-accent font-medium' : 'text-ink group-hover:text-accent'
-                      }`}
-                    >
-                      {item.title}
-                    </span>
-                  </div>
-
-                  <span className="smallcaps font-mono text-[11px] text-soft shrink-0">
-                    p. {item.page + 1}
-                  </span>
-                </button>
-              )
-            })
+            tocTree.map((item) => (
+              <TocRow
+                key={item.id || `${item.page}:${item.title}`}
+                item={item}
+                level={1}
+                activeId={activeId}
+                expandedIds={expandedIds}
+                onToggleExpand={toggleExpand}
+                onSelect={handleSelect}
+                activeItemRef={activeItemRef}
+              />
+            ))
           )}
         </nav>
 
-        {/* Footer Statistics */}
-        <footer className="border-t border-line bg-paper/50 px-6 py-3 flex items-center justify-between text-xs text-soft">
-          <span className="font-serif italic">
-            {tocItems.length} {tocItems.length === 1 ? 'Chapter' : 'Chapters'}
+        {/* Clean Footer */}
+        <footer className="border-t border-line/80 bg-paper/40 px-5 py-2.5 flex items-center justify-between text-xs text-soft">
+          <span className="font-serif italic text-[11.5px]">
+            {flattenedWithParents.length} {flattenedWithParents.length === 1 ? 'section' : 'sections'}
           </span>
-          <span className="smallcaps font-mono">
-            {Math.round(((currentPage + 1) / Math.max(1, pages.length)) * 100)}% Read
+          <span className="font-sans text-[11px] tabular-nums">
+            {Math.round(((currentPage + 1) / Math.max(1, pages.length)) * 100)}% read
           </span>
         </footer>
       </aside>
