@@ -1,9 +1,10 @@
 import { memo, useEffect, useRef, useState, type CSSProperties } from 'react'
-import { Library, NotebookPen, Feather, Maximize2, Minimize2, Columns2, Link2, Unlink2, Trash2, X, FileText, Bookmark } from 'lucide-react'
+import { Library, NotebookPen, Feather, Maximize2, Minimize2, Columns2, Link2, Unlink2, Trash2, X, FileText, Bookmark, BookOpen } from 'lucide-react'
 import { useStore } from '../store.ts'
 import { Page } from './Page.tsx'
 import { SelectionPopover } from './SelectionPopover.tsx'
 import { Quotebook } from './Quotebook.tsx'
+import { ChapterDrawer } from './ChapterDrawer.tsx'
 import { Customizer, FONTS } from './Customizer.tsx'
 import { ReadingScrubber } from './ReadingScrubber.tsx'
 
@@ -34,6 +35,9 @@ export const goToPage = (i: number, behavior: ScrollBehavior = 'smooth') => {
     window.scrollTo({ top: i * 1008, behavior })
   }
 }
+
+// Bi-directional predictive buffer: 3 pages forward, 3 pages back (7 pages alive in DOM)
+const OVERSCAN_PAGES = 3
 
 const VirtualPage = memo(function VirtualPage({
   bookId,
@@ -87,6 +91,7 @@ export function Reader() {
   const prefs = useStore((s) => s.prefs)
   const count = useStore((s) => s.notes.length)
   const drawer = useStore((s) => s.drawer)
+  const chapterDrawer = useStore((s) => s.chapterDrawer)
   const isSaving = useStore((s) => s.isSaving)
   const focusMode = useStore((s) => s.focusMode)
   const comparativeMode = useStore((s) => s.comparativeMode)
@@ -100,6 +105,7 @@ export function Reader() {
   const {
     closeBook,
     toggleDrawer,
+    toggleChapterDrawer,
     toggleFocusMode,
     toggleComparativeMode,
     setComparativeBook,
@@ -115,7 +121,6 @@ export function Reader() {
   const [current] = useState(book.page)
   const currentRef = useRef(book.page)
   const lastTurnTimeRef = useRef(0)
-  const [showTocModal, setShowTocModal] = useState(false)
 
   // Strict 3-page virtual viewport window center
   const [activeWindowCenter, setActiveWindowCenter] = useState(book.page || 0)
@@ -175,6 +180,12 @@ export function Reader() {
         return
       }
 
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault()
+        toggleChapterDrawer()
+        return
+      }
+
       if ((e.metaKey || e.ctrlKey) && (e.key === '\\' || e.code === 'Backslash')) {
         e.preventDefault()
         toggleComparativeMode()
@@ -207,7 +218,9 @@ export function Reader() {
         const prev = getPrevVisiblePage(currentRef.current, book.prunedPages)
         goToPage(prev, behavior)
       } else if (e.key === 'Escape') {
-        if (managePrunedOpen) {
+        if (chapterDrawer) {
+          toggleChapterDrawer(false)
+        } else if (managePrunedOpen) {
           toggleManagePruned(false)
         } else if (drawer) {
           toggleDrawer(false)
@@ -219,7 +232,7 @@ export function Reader() {
 
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [drawer, focusMode, managePrunedOpen, pages.length, book.prunedPages, toggleDrawer, toggleFocusMode, toggleManagePruned])
+  }, [drawer, chapterDrawer, focusMode, managePrunedOpen, pages.length, book.prunedPages, toggleDrawer, toggleChapterDrawer, toggleFocusMode, toggleManagePruned])
 
   const vars = {
     '--read-font': FONTS[prefs.font].family,
@@ -253,10 +266,10 @@ export function Reader() {
 
         {book.toc && book.toc.length > 0 && (
           <button
-            onClick={() => setShowTocModal(true)}
+            onClick={() => toggleChapterDrawer(true)}
             className="grid size-9 place-items-center rounded-md text-soft transition hover:bg-line hover:text-ink focus-visible:bg-line"
-            aria-label="Table of Contents"
-            title="Table of Contents"
+            aria-label="Table of Contents (⌘B)"
+            title="Table of Contents (⌘B)"
           >
             <Bookmark size={18} strokeWidth={1.5} />
           </button>
@@ -291,6 +304,19 @@ export function Reader() {
         </div>
 
         <div className="flex items-center gap-1.5">
+          {/* Chapter / Table of Contents Drawer button (Apple Books parity) */}
+          <button
+            onClick={() => toggleChapterDrawer()}
+            className={`grid size-9 place-items-center rounded-md transition ${
+              chapterDrawer ? 'bg-line text-accent font-semibold' : 'text-soft hover:bg-line hover:text-ink focus-visible:bg-line'
+            }`}
+            aria-pressed={chapterDrawer}
+            aria-label="Table of Contents (⌘B)"
+            title="Table of Contents  ⌘B"
+          >
+            <BookOpen size={18} strokeWidth={1.5} />
+          </button>
+
           {/* Comparative Split-View button */}
           <button
             onClick={() => toggleComparativeMode()}
@@ -353,7 +379,7 @@ export function Reader() {
                   bookId={book.id}
                   index={i}
                   html={html}
-                  isVisible={Math.abs(i - activeWindowCenter) <= 1}
+                  isVisible={Math.abs(i - activeWindowCenter) <= OVERSCAN_PAGES}
                 />
               ))}
             </div>
@@ -403,7 +429,7 @@ export function Reader() {
                         bookId={`comp:${comparativeBookId}`}
                         index={i}
                         html={html}
-                        isVisible={Math.abs(i - activeWindowCenter) <= 1}
+                        isVisible={Math.abs(i - activeWindowCenter) <= OVERSCAN_PAGES}
                       />
                     </div>
                   ))}
@@ -434,7 +460,7 @@ export function Reader() {
               bookId={book.id}
               index={i}
               html={html}
-              isVisible={Math.abs(i - activeWindowCenter) <= 1}
+              isVisible={Math.abs(i - activeWindowCenter) <= OVERSCAN_PAGES}
             />
           ))
         )}
@@ -548,57 +574,8 @@ export function Reader() {
         </div>
       )}
 
-      {/* Table of Contents Instant Nav Modal */}
-      {showTocModal && book.toc && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/20 p-4 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="grain w-full max-w-md rounded-sm border border-line bg-card p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-line pb-3">
-              <div>
-                <h3 className="font-serif italic font-semibold text-base">Table of Contents</h3>
-                <p className="text-xs text-soft">Instant O(1) chapter navigation</p>
-              </div>
-              <button
-                onClick={() => setShowTocModal(false)}
-                className="text-soft hover:text-ink cursor-pointer p-1"
-                aria-label="Close"
-              >
-                <X size={18} strokeWidth={1.5} />
-              </button>
-            </div>
-
-            <div className="max-h-80 overflow-y-auto space-y-1 pr-1">
-              {book.toc.map((item, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => {
-                    goToPage(item.page, 'instant')
-                    setShowTocModal(false)
-                  }}
-                  className="w-full flex items-center justify-between gap-3 rounded p-2.5 text-left text-xs transition hover:bg-paper cursor-pointer group"
-                >
-                  <span className="font-serif text-ink group-hover:text-accent font-medium truncate">
-                    {item.title}
-                  </span>
-                  <span className="smallcaps text-soft shrink-0">
-                    Page {item.page + 1}
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            <div className="flex justify-end border-t border-line pt-3">
-              <button
-                onClick={() => setShowTocModal(false)}
-                className="rounded bg-ink px-4 py-1.5 text-xs text-paper font-sans cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <SelectionPopover />
+      <ChapterDrawer />
       <Quotebook />
     </div>
   )

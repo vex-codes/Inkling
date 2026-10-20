@@ -3,6 +3,11 @@
 
 import type { Book, Format, TocItem } from '../lib/db.ts'
 import { countWords, esc, paginate } from '../lib/text.ts'
+import {
+  extractTocFromEpubBook,
+  extractTocFromPdfDoc,
+  extractTocFromMarkdown,
+} from './tocExtractor.ts'
 
 export type IngestedBook = Pick<Book, 'title' | 'author' | 'year' | 'publisher' | 'format' | 'pageCount' | 'wordCount'> & {
   pages: string[]
@@ -116,21 +121,32 @@ function cleanInline(node: Node): string {
  */
 function extractSanitizedBlocks(root: Element): string[] {
   const out: string[] = []
+  let isFirstParagraph = true
+
   const walk = (el: Element) => {
     for (const c of el.children) {
       const t = c.localName.toLowerCase()
-      const hasText = [...c.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && n.textContent?.trim())
       if (t === 'script' || t === 'style' || t === 'link' || t === 'meta') continue
+
+      if (t === 'hr') {
+        out.push('<hr class="scene-divider" />')
+        continue
+      }
+
+      const hasText = [...c.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && n.textContent?.trim())
 
       if (BLOCK_TAGS.test(t) || hasText) {
         const text = cleanInline(c).trim()
         if (text) {
           if (t[0] === 'h' && t.length === 2) {
             out.push(`<h2>${text}</h2>`)
+            isFirstParagraph = true
           } else if (t === 'blockquote') {
             out.push(`<blockquote class="academic-callout">${text}</blockquote>`)
           } else {
-            out.push(`<p>${text}</p>`)
+            const cls = isFirstParagraph ? ' class="chapter-open"' : ''
+            out.push(`<p${cls}>${text}</p>`)
+            isFirstParagraph = false
           }
         }
       } else {
@@ -152,6 +168,8 @@ async function fromEpub(file: File): Promise<{ pages: string[]; meta: Partial<Bo
   book.spine.each((s: (typeof sections)[number]) => sections.push(s))
 
   const chapters: string[][] = []
+  const sectionPageMap = new Map<string, number>()
+  let currentPageCount = 0
   let lastYield = performance.now()
 
   // Stream each spine item independently to keep Chromebook memory capped
@@ -164,28 +182,25 @@ async function fromEpub(file: File): Promise<{ pages: string[]; meta: Partial<Bo
     const body = el.getElementsByTagName('body')[0] ?? el
     const blocks = extractSanitizedBlocks(body)
     if (blocks.length > 0) {
+      const href = (s as unknown as { href?: string }).href
+      if (href) {
+        const clean = href.split('#')[0]
+        const base = clean.split('/').pop() || clean
+        sectionPageMap.set(clean, currentPageCount)
+        sectionPageMap.set(base, currentPageCount)
+      }
       chapters.push(blocks)
+      const paginated = paginate([blocks])
+      currentPageCount += paginated.length
     }
     s.unload() // Instantly unload spine item DOM from memory
   }
 
-  // Extract Table of Contents
-  const toc: TocItem[] = []
-  try {
-    const nav = await book.loaded.navigation
-    if (nav?.toc) {
-      nav.toc.forEach((item: { label?: string; title?: string; href?: string }, idx: number) => {
-        const title = item.label || item.title || `Chapter ${idx + 1}`
-        toc.push({ title: title.trim(), page: idx, href: item.href })
-      })
-    }
-  } catch {
-    // Navigation extraction is best-effort
-  }
+  const pages = paginate(chapters.filter((c) => c.length > 0))
+  const toc = await extractTocFromEpubBook(book, pages, sectionPageMap)
 
   book.destroy()
 
-  const pages = paginate(chapters.filter((c) => c.length > 0))
   return {
     pages,
     toc,
@@ -248,22 +263,6 @@ async function fromPdf(file: File): Promise<{ pages: string[]; meta: Partial<Boo
   const doc = await task.promise
   const info = ((await doc.getMetadata()).info ?? {}) as { Title?: string; Author?: string; CreationDate?: string }
   const pages: string[] = []
-  const toc: TocItem[] = []
-
-  // Extract outlines / bookmarks if present
-  try {
-    const outline = await doc.getOutline()
-    if (outline) {
-      outline.forEach((item, idx) => {
-        if (item.title) {
-          toc.push({ title: item.title, page: idx })
-        }
-      })
-    }
-  } catch {
-    // Outline is best-effort
-  }
-
   let lastYield = performance.now()
   for (let i = 1; i <= doc.numPages; i++) {
     if (performance.now() - lastYield > 12) {
@@ -275,6 +274,9 @@ async function fromPdf(file: File): Promise<{ pages: string[]; meta: Partial<Boo
     pages.push(parsePdfPageText(tc.items.filter((it): it is PdfItem & typeof it => 'str' in it)))
     page.cleanup() // Reclaim PDF page cache immediately
   }
+
+  // Extract outlines / bookmarks with accurate page numbers
+  const toc = await extractTocFromPdfDoc(doc, pages)
 
   await doc.cleanup()
   await task.destroy()
@@ -346,8 +348,6 @@ async function fromMarkdown(file: File): Promise<{ pages: string[]; meta: Partia
   }
 
   const chapters: string[][] = [[]]
-  const toc: TocItem[] = []
-  let estimatedPage = 0
 
   for (const block of content.split(/\n\s*\n/)) {
     const trimmed = block.trim()
@@ -362,20 +362,24 @@ async function fromMarkdown(file: File): Promise<{ pages: string[]; meta: Partia
     if (headingMatch) {
       if (chapters[chapters.length - 1].length > 0) {
         chapters.push([])
-        estimatedPage++
       }
       chapters[chapters.length - 1].push(`<h2>${inlineHtml}</h2>`)
-      toc.push({ title: headingText, page: estimatedPage })
+    } else if (/^([-*_]){3,}$/.test(trimmed)) {
+      chapters[chapters.length - 1].push('<hr class="scene-divider" />')
     } else if (trimmed.startsWith('>')) {
       const quoteText = esc(trimmed.replace(/^>\s*/gm, '').trim())
       chapters[chapters.length - 1].push(`<blockquote class="academic-callout">${quoteText}</blockquote>`)
     } else {
-      chapters[chapters.length - 1].push(`<p>${inlineHtml}</p>`)
+      const isFirstPara = chapters[chapters.length - 1].filter((b) => b.startsWith('<p')).length === 0
+      const cls = isFirstPara ? ' class="chapter-open"' : ''
+      chapters[chapters.length - 1].push(`<p${cls}>${inlineHtml}</p>`)
     }
   }
 
+  const pages = paginate(chapters.filter((c) => c.length > 0))
+  const toc = extractTocFromMarkdown(raw, pages)
   return {
-    pages: paginate(chapters.filter((c) => c.length > 0)),
+    pages,
     toc,
     meta,
   }

@@ -75,11 +75,15 @@ function parseMarkdownOffThread(raw: string) {
       }
       chapters[chapters.length - 1].push(`<h2>${inlineHtml}</h2>`)
       toc.push({ title: headingText, page: estimatedPage })
+    } else if (/^([-*_]){3,}$/.test(trimmed)) {
+      chapters[chapters.length - 1].push('<hr class="scene-divider" />')
     } else if (trimmed.startsWith('>')) {
       const quoteText = esc(trimmed.replace(/^>\s*/gm, '').trim())
       chapters[chapters.length - 1].push(`<blockquote class="academic-callout">${quoteText}</blockquote>`)
     } else {
-      chapters[chapters.length - 1].push(`<p>${inlineHtml}</p>`)
+      const isFirstPara = chapters[chapters.length - 1].filter((b) => b.startsWith('<p')).length === 0
+      const cls = isFirstPara ? ' class="chapter-open"' : ''
+      chapters[chapters.length - 1].push(`<p${cls}>${inlineHtml}</p>`)
     }
 
     const words = trimmed.split(/\s+/).length

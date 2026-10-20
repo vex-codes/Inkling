@@ -3,6 +3,7 @@ import { db, DEFAULT_LEGEND, DEFAULT_PREFS, type Annotation, type Book, type Fla
 import { findInHtml, clearAllHighlightLayers } from './lib/anchor.ts'
 import { ingest } from './lib/ingest.ts'
 import { countWords, mdToChapters, paginate } from './lib/text.ts'
+import { extractTocFromMarkdown, extractTocFromPages } from './services/tocExtractor.ts'
 import gatsby from './sample/gatsby-ch1.md?raw'
 
 type NewMark = Pick<Annotation, 'page' | 'start' | 'end' | 'quote' | 'kind' | 'color'>
@@ -24,6 +25,7 @@ interface State {
   pages: string[]
   notes: Annotation[]
   drawer: boolean
+  chapterDrawer: boolean
   focusId: string | null
   focusMode: boolean
   isFastScrolling: boolean
@@ -66,6 +68,7 @@ interface State {
   updateNote(id: string, patch: Partial<Pick<Annotation, 'note' | 'color' | 'kind'>>): void
   removeNote(id: string): void
   toggleDrawer(open?: boolean): void
+  toggleChapterDrawer(open?: boolean): void
   backupSanctuary(): Promise<string>
   restoreSanctuary(jsonString: string): Promise<void>
 }
@@ -102,7 +105,9 @@ export const useStore = create<State>()((set, get) => {
   }
 
   const seedSample = async (): Promise<Book> => {
-    const pages = paginate(mdToChapters(gatsby))
+    const chapters = mdToChapters(gatsby)
+    const pages = paginate(chapters)
+    const toc = extractTocFromMarkdown(gatsby, pages)
     const book: Book = {
       id: uid(),
       title: 'The Great Gatsby',
@@ -118,6 +123,7 @@ export const useStore = create<State>()((set, get) => {
       flags: [{ id: uid(), page: 0, color: 'rose', label: 'Narrator' }],
       legend: { ...DEFAULT_LEGEND },
       prunedPages: [],
+      toc,
     }
     const seeds: [string, Kind, Ink, string][] = [
       ['reserve all judgements', 'highlight', 'rose', 'Claims to withhold judgement — then judges everyone. Reliable narrator?'],
@@ -169,6 +175,7 @@ export const useStore = create<State>()((set, get) => {
     pages: [],
     notes: [],
     drawer: false,
+    chapterDrawer: false,
     focusId: null,
     focusMode: false,
     isFastScrolling: false,
@@ -394,8 +401,22 @@ export const useStore = create<State>()((set, get) => {
         db.annotations.where('bookId').equals(id).toArray(),
       ])
       if (!book || !content) return
+
+      let toc = book.toc
+      if (!toc || toc.length === 0) {
+        toc = extractTocFromPages(content.pages)
+        if (toc.length > 0) {
+          void db.books.update(id, { toc })
+        }
+      }
+
       set({
-        book: { ...book, legend: { ...DEFAULT_LEGEND, ...book.legend }, prunedPages: book.prunedPages ?? [] },
+        book: {
+          ...book,
+          toc,
+          legend: { ...DEFAULT_LEGEND, ...book.legend },
+          prunedPages: book.prunedPages ?? [],
+        },
         pages: content.pages,
         notes,
         focusId: null,
@@ -410,6 +431,7 @@ export const useStore = create<State>()((set, get) => {
         pages: [],
         notes: [],
         drawer: false,
+        chapterDrawer: false,
         comparativeMode: false,
         comparativeBookId: null,
         comparativePages: [],
@@ -487,6 +509,10 @@ export const useStore = create<State>()((set, get) => {
 
     toggleDrawer(open) {
       set({ drawer: open ?? !get().drawer })
+    },
+
+    toggleChapterDrawer(open) {
+      set({ chapterDrawer: open ?? !get().chapterDrawer })
     },
 
     setFastScrolling(isFastScrolling) {

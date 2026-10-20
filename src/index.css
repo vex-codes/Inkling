@@ -62,18 +62,22 @@
 [data-theme="cream"] {
   --paper: #F9F6EE; --ink: #2B2523; --desk: #E7DFCE; --card: #FDFBF6; --back: #ECE4D2;
   --soft: rgb(43 37 35 / .7); --line: rgb(43 37 35 / .12); --shade: 43 37 35; --accent: #8C3B2E;
+  --theme-text-color: #2B2523;
 }
 [data-theme="parchment"] {
   --paper: #F4EFEA; --ink: #262322; --desk: #E1D6C9; --card: #FAF7F3; --back: #E7DED3;
   --soft: rgb(38 35 34 / .7); --line: rgb(38 35 34 / .12); --shade: 38 35 34; --accent: #8C3B2E;
+  --theme-text-color: #262322;
 }
 [data-theme="sage"] {
   --paper: #EAEFE9; --ink: #202B24; --desk: #D2DBD0; --card: #F4F7F3; --back: #DAE2D7;
   --soft: rgb(32 43 36 / .72); --line: rgb(32 43 36 / .13); --shade: 32 43 36; --accent: #7A4A2E;
+  --theme-text-color: #202B24;
 }
 [data-theme="midnight"] {
   --paper: #181615; --ink: #D8D2C4; --desk: #0D0C0B; --card: #221F1D; --back: #2B2623;
   --soft: rgb(216 210 196 / .64); --line: rgb(216 210 196 / .12); --shade: 0 0 0; --accent: #D49C76;
+  --theme-text-color: #E6E1DC;
   color-scheme: dark;
 }
 
@@ -191,8 +195,23 @@ body {
   hyphens: auto; text-wrap: pretty; font-variant-numeric: oldstyle-nums; font-kerning: normal;
   transition: font-size .25s ease;
 }
+
+.inkling-page-content {
+  color: var(--theme-text-color, #E6E1DC) !important;
+  background: transparent !important;
+}
+.inkling-page-content * {
+  color: inherit !important;
+}
+
 .prose-ink p { margin: 0; margin-bottom: 0; text-indent: 1.5em; text-align: justify; }
-.prose-ink :is(h2, blockquote) + p, .prose-ink > p:first-child { text-indent: 0; }
+.prose-ink :is(h2, blockquote) + p,
+.prose-ink p.chapter-open,
+.prose-ink hr + p,
+.prose-ink .scene-divider + p {
+  text-indent: 0;
+}
+
 .prose-ink h2 {
   margin: 1.5em 0 1.75em; text-align: center; font-weight: 400; font-size: 1.15em;
   font-variant: all-small-caps; letter-spacing: .22em; color: var(--accent);
@@ -201,7 +220,7 @@ body {
 
 /* Apple Books Style Drop Caps on chapter openings */
 .prose-ink h2 + p::first-letter,
-.prose-ink > p:first-of-type::first-letter {
+.prose-ink p.chapter-open::first-letter {
   float: left;
   font-family: var(--read-font), serif;
   font-size: 3.2em;
@@ -215,12 +234,31 @@ body {
 .prose-ink blockquote,
 .prose-ink .academic-callout {
   margin: 1.25em 1.5em;
-  padding: 0.5em 1em;
-  border-left: 2px solid var(--accent);
-  background: rgb(var(--shade) / 0.02);
+  padding: 0.6em 1.2em;
+  border-left: 2.5px solid var(--accent);
+  background: rgb(var(--shade) / 0.03);
   font-style: italic;
   text-indent: 0;
   opacity: 0.95;
+}
+
+.prose-ink hr,
+.prose-ink .scene-divider {
+  border: none;
+  text-align: center;
+  margin: 1.8em 0;
+  height: auto;
+  overflow: visible;
+  color: var(--accent);
+  opacity: 0.6;
+}
+.prose-ink hr::after,
+.prose-ink .scene-divider::after {
+  content: "❦   ❦   ❦";
+  display: inline-block;
+  font-family: var(--read-font), serif;
+  font-size: 0.9em;
+  letter-spacing: 0.5em;
 }
 
 .prose-ink .academic-code {

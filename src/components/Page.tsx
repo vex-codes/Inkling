@@ -258,7 +258,7 @@ export const Page = memo(function Page({ index, html }: { index: number; html: s
 
           <div className="grid grid-cols-[minmax(0,auto)_var(--margin-w)] gap-x-8 pb-6 pl-14 pr-5 pt-4 max-md:gap-x-4 max-md:pl-8 max-sm:grid-cols-[1fr_auto]">
             <div className="relative">
-              <div ref={textRef} data-content={index} className="prose-ink" dangerouslySetInnerHTML={{ __html: html }} />
+              <div ref={textRef} data-content={index} className="prose-ink inkling-page-content" dangerouslySetInnerHTML={{ __html: html }} />
               {near &&
                 sorted
                   .filter((n) => n.kind === 'bracket')
