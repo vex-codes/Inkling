@@ -92,7 +92,16 @@ function getWorker(): Worker | null {
 
 // ── EPUB Pipeline (Apple Books Parity & Publisher CSS Scoper) ───────────────────
 
-const BLOCK_TAGS = /^(p|h[1-6]|blockquote|li|pre|dd|dt|figcaption)$/i
+const BLOCK_TAGS = /^(p|h[1-6]|blockquote|li|pre|dd|dt|figcaption|hr)$/i
+const CONTAINER_TAGS = /^(div|section|article|header|footer|main|aside|body)$/i
+
+function hasBlockChildren(el: Element): boolean {
+  for (const c of el.children) {
+    const t = c.localName.toLowerCase()
+    if (BLOCK_TAGS.test(t) || CONTAINER_TAGS.test(t)) return true
+  }
+  return false
+}
 
 /**
  * Clean inline text while stripping publisher fonts, colors, and ad-hoc sizes
@@ -117,7 +126,7 @@ function cleanInline(node: Node): string {
 
 /**
  * Normalizes publisher XHTML body into clean, semantic Inkling blocks.
- * Eliminates publisher inline fonts, absolute margins, and fixed widths.
+ * Prevents splitting inline formatted spans into multiple distinct paragraphs.
  */
 function extractSanitizedBlocks(root: Element): string[] {
   const out: string[] = []
@@ -133,27 +142,59 @@ function extractSanitizedBlocks(root: Element): string[] {
         continue
       }
 
-      const hasText = [...c.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && n.textContent?.trim())
-
-      if (BLOCK_TAGS.test(t) || hasText) {
+      if (t[0] === 'h' && t.length === 2) {
         const text = cleanInline(c).trim()
         if (text) {
-          if (t[0] === 'h' && t.length === 2) {
-            out.push(`<h2>${text}</h2>`)
-            isFirstParagraph = true
-          } else if (t === 'blockquote') {
-            out.push(`<blockquote class="academic-callout">${text}</blockquote>`)
-          } else {
+          out.push(`<h2>${text}</h2>`)
+          isFirstParagraph = true
+        }
+        continue
+      }
+
+      if (t === 'blockquote') {
+        const text = cleanInline(c).trim()
+        if (text) {
+          out.push(`<blockquote class="academic-callout">${text}</blockquote>`)
+        }
+        continue
+      }
+
+      if (t === 'p') {
+        const text = cleanInline(c).trim()
+        if (text) {
+          const cls = isFirstParagraph ? ' class="chapter-open"' : ''
+          out.push(`<p${cls}>${text}</p>`)
+          isFirstParagraph = false
+        }
+        continue
+      }
+
+      if (CONTAINER_TAGS.test(t)) {
+        if (hasBlockChildren(c)) {
+          walk(c)
+        } else {
+          // Container contains only inline text/spans — treat as a single cohesive paragraph
+          const text = cleanInline(c).trim()
+          if (text) {
             const cls = isFirstParagraph ? ' class="chapter-open"' : ''
             out.push(`<p${cls}>${text}</p>`)
             isFirstParagraph = false
           }
         }
-      } else {
+        continue
+      }
+
+      if (hasBlockChildren(c)) {
         walk(c)
+      } else {
+        const text = cleanInline(c).trim()
+        if (text) {
+          out.push(`<p>${text}</p>`)
+        }
       }
     }
   }
+
   walk(root)
   return out
 }
@@ -167,12 +208,10 @@ async function fromEpub(file: File): Promise<{ pages: string[]; meta: Partial<Bo
   const sections: { load: (r: unknown) => Promise<Element>; unload: () => void }[] = []
   book.spine.each((s: (typeof sections)[number]) => sections.push(s))
 
-  const chapters: string[][] = []
-  const sectionPageMap = new Map<string, number>()
-  let currentPageCount = 0
+  // 1. Extract blocks from each spine section
+  const spineSections: { href: string; blocks: string[] }[] = []
   let lastYield = performance.now()
 
-  // Stream each spine item independently to keep Chromebook memory capped
   for (const s of sections) {
     if (performance.now() - lastYield > 12) {
       await yieldToMain()
@@ -182,23 +221,59 @@ async function fromEpub(file: File): Promise<{ pages: string[]; meta: Partial<Bo
     const body = el.getElementsByTagName('body')[0] ?? el
     const blocks = extractSanitizedBlocks(body)
     if (blocks.length > 0) {
-      const href = (s as unknown as { href?: string }).href
-      if (href) {
-        const clean = href.split('#')[0]
-        const base = clean.split('/').pop() || clean
-        sectionPageMap.set(clean, currentPageCount)
-        sectionPageMap.set(base, currentPageCount)
-      }
-      chapters.push(blocks)
-      const paginated = paginate([blocks])
-      currentPageCount += paginated.length
+      const href = (s as unknown as { href?: string }).href || ''
+      spineSections.push({ href, blocks })
     }
     s.unload() // Instantly unload spine item DOM from memory
   }
 
-  const pages = paginate(chapters.filter((c) => c.length > 0))
-  const toc = await extractTocFromEpubBook(book, pages, sectionPageMap)
+  // 2. Intelligently group spine sections into chapters
+  // Headings and their opening paragraphs must start on the same page, not 3 separate pages!
+  const chapters: string[][] = []
+  let currentChapter: string[] = []
+  let currentWords = 0
 
+  for (const { blocks } of spineSections) {
+    const sectionWords = blocks.reduce((sum, b) => sum + countWords(b), 0)
+    const hasMajorHeading = blocks.some((b) => b.startsWith('<h2>'))
+
+    // Break to a new chapter ONLY if we already have an established chapter with content (>80 words)
+    // AND this new section starts with a major heading
+    if (currentChapter.length > 0 && hasMajorHeading && currentWords > 80) {
+      chapters.push(currentChapter)
+      currentChapter = []
+      currentWords = 0
+    }
+
+    currentChapter.push(...blocks)
+    currentWords += sectionWords
+  }
+
+  if (currentChapter.length > 0) {
+    chapters.push(currentChapter)
+  }
+
+  // 3. Paginate chapters with comfortable book page capacity (420 words per page)
+  const pages = paginate(chapters.filter((c) => c.length > 0), 420)
+
+  // 4. Map spine hrefs to page numbers for accurate TOC
+  const sectionPageMap = new Map<string, number>()
+  for (const { href, blocks } of spineSections) {
+    if (href && blocks.length > 0) {
+      const clean = href.split('#')[0]
+      const base = clean.split('/').pop() || clean
+      const searchSnippet = blocks[0].replace(/<[^>]+>/g, '').trim().slice(0, 40)
+      if (searchSnippet) {
+        const found = pages.findIndex((p) => p.includes(searchSnippet))
+        if (found !== -1) {
+          sectionPageMap.set(clean, found)
+          sectionPageMap.set(base, found)
+        }
+      }
+    }
+  }
+
+  const toc = await extractTocFromEpubBook(book, pages, sectionPageMap)
   book.destroy()
 
   return {

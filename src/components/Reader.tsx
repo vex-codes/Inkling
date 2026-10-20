@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Library, NotebookPen, Feather, Maximize2, Minimize2, Columns2, Link2, Unlink2, Trash2, X, FileText, Bookmark, BookOpen } from 'lucide-react'
 import { useStore } from '../store.ts'
 import { Page } from './Page.tsx'
@@ -27,63 +27,11 @@ export const getPrevVisiblePage = (current: number, pruned: number[] = []): numb
 }
 
 export const goToPage = (i: number, behavior: ScrollBehavior = 'smooth') => {
-  window.__inklingSetVirtualCenter?.(i)
   const el = document.querySelector(`[data-page="${i}"]`)
   if (el) {
     el.scrollIntoView({ behavior, block: 'start' })
-  } else {
-    window.scrollTo({ top: i * 1008, behavior })
   }
 }
-
-// Bi-directional predictive buffer: 3 pages forward, 3 pages back (7 pages alive in DOM)
-const OVERSCAN_PAGES = 3
-
-const VirtualPage = memo(function VirtualPage({
-  bookId,
-  index,
-  html,
-  isVisible,
-}: {
-  bookId: string
-  index: number
-  html: string
-  isVisible: boolean
-}) {
-  if (isVisible) {
-    return <Page key={`${bookId}:${index}`} index={index} html={html} />
-  }
-
-  return (
-    <div
-      key={`${bookId}:${index}`}
-      data-page={index}
-      className="sheet-wrap reader-page-container virtual-page-anchor w-full scroll-mt-20 flex items-center justify-center select-none"
-      style={{
-        contain: 'strict',
-        contentVisibility: 'auto',
-        height: '960px',
-        minHeight: '960px',
-      }}
-    >
-      <div className="relative mx-auto w-fit max-w-full">
-        <article className="sheet grain w-[860px] max-w-full h-[960px] border border-line/20 rounded-sm opacity-25 flex flex-col justify-between p-12 pointer-events-none">
-          <div className="flex justify-between items-center text-xs text-soft/50 font-serif italic">
-            <span className="smallcaps">Inkling Leaf {index + 1}</span>
-            <span>❦</span>
-          </div>
-          <div className="space-y-4 max-w-md mx-auto w-full opacity-30">
-            <div className="h-3.5 w-1/3 rounded-sm bg-line/30 mx-auto mb-8" />
-            <div className="h-2.5 w-full rounded-sm bg-line/20" />
-            <div className="h-2.5 w-5/6 rounded-sm bg-line/20" />
-            <div className="h-2.5 w-full rounded-sm bg-line/20" />
-          </div>
-          <footer className="smallcaps text-center text-xs text-soft/40">{index + 1}</footer>
-        </article>
-      </div>
-    </div>
-  )
-})
 
 export function Reader() {
   const book = useStore((s) => s.book!)
@@ -122,23 +70,6 @@ export function Reader() {
   const currentRef = useRef(book.page)
   const lastTurnTimeRef = useRef(0)
 
-  // Strict 3-page virtual viewport window center
-  const [activeWindowCenter, setActiveWindowCenter] = useState(book.page || 0)
-  const activeWindowCenterRef = useRef(book.page || 0)
-
-  useEffect(() => {
-    window.__inklingSetVirtualCenter = (page: number) => {
-      activeWindowCenterRef.current = page
-      setActiveWindowCenter(page)
-      currentRef.current = page
-      const headerEl = document.getElementById('header-current-page')
-      if (headerEl) headerEl.textContent = `${page + 1}`
-    }
-    return () => {
-      delete window.__inklingSetVirtualCenter
-    }
-  }, [])
-
   useEffect(() => {
     let ticking = false
     const onScroll = () => {
@@ -147,15 +78,23 @@ export function Reader() {
       requestAnimationFrame(() => {
         ticking = false
         const viewportCenter = window.scrollY + window.innerHeight * 0.45
-        const pageHeight = 960 + 48
-        const estPage = Math.max(0, Math.min(pages.length - 1, Math.floor(viewportCenter / pageHeight)))
+        const pageEls = document.querySelectorAll<HTMLElement>('.reader-page-container')
+        if (pageEls.length === 0) return
 
-        if (Math.abs(estPage - activeWindowCenterRef.current) >= 1) {
-          activeWindowCenterRef.current = estPage
-          setActiveWindowCenter(estPage)
-          currentRef.current = estPage
+        let activePage = 0
+        for (let i = 0; i < pageEls.length; i++) {
+          const top = pageEls[i].offsetTop
+          const height = pageEls[i].offsetHeight
+          if (viewportCenter >= top && viewportCenter < top + height) {
+            activePage = i
+            break
+          }
+        }
+
+        if (activePage !== currentRef.current) {
+          currentRef.current = activePage
           const headerEl = document.getElementById('header-current-page')
-          if (headerEl) headerEl.textContent = `${estPage + 1}`
+          if (headerEl) headerEl.textContent = `${activePage + 1}`
         }
       })
     }
@@ -374,13 +313,7 @@ export function Reader() {
                 <span className="smallcaps text-soft">Page {current + 1} of {pages.length}</span>
               </div>
               {pages.map((html, i) => (
-                <VirtualPage
-                  key={`${book.id}:${i}`}
-                  bookId={book.id}
-                  index={i}
-                  html={html}
-                  isVisible={Math.abs(i - activeWindowCenter) <= OVERSCAN_PAGES}
-                />
+                <Page key={`${book.id}:${i}`} index={i} html={html} />
               ))}
             </div>
 
@@ -425,12 +358,7 @@ export function Reader() {
                 <div className="flex flex-col items-center gap-10 w-full">
                   {comparativePages.map((html, i) => (
                     <div key={`comp:${comparativeBookId}:${i}`} className="w-full flex justify-center">
-                      <VirtualPage
-                        bookId={`comp:${comparativeBookId}`}
-                        index={i}
-                        html={html}
-                        isVisible={Math.abs(i - activeWindowCenter) <= OVERSCAN_PAGES}
-                      />
+                      <Page index={i} html={html} />
                     </div>
                   ))}
                 </div>
@@ -455,13 +383,7 @@ export function Reader() {
           </div>
         ) : (
           pages.map((html, i) => (
-            <VirtualPage
-              key={`${book.id}:${i}`}
-              bookId={book.id}
-              index={i}
-              html={html}
-              isVisible={Math.abs(i - activeWindowCenter) <= OVERSCAN_PAGES}
-            />
+            <Page key={`${book.id}:${i}`} index={i} html={html} />
           ))
         )}
         <p className="smallcaps text-soft py-8">❦ end of {book.title} ❦</p>

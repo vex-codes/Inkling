@@ -41,13 +41,20 @@ export function mdToChapters(md: string): string[][] {
 }
 
 /** Flow block HTML into book-like pages. Chapters always start on a fresh page. */
-export function paginate(chapters: string[][], wordsPerPage = 300): string[] {
+export function paginate(chapters: string[][], wordsPerPage = 420): string[] {
   const pages: string[] = []
   for (const blocks of chapters) {
     let page = '', words = 0
     for (const b of blocks) {
       const w = countWords(b)
-      if (words && words + w > wordsPerPage) { pages.push(page); page = ''; words = 0 }
+      const isHeading = b.startsWith('<h2>') || b.startsWith('<h1')
+      const shouldBreakBefore = isHeading && words > wordsPerPage * 0.7
+
+      if (words && (words + w > wordsPerPage || shouldBreakBefore)) {
+        pages.push(page)
+        page = ''
+        words = 0
+      }
       page += b
       words += w
     }
