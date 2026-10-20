@@ -25,6 +25,7 @@ export interface Book {
   dogears: number[]
   flags: Flag[]
   legend: Record<Ink, string>
+  prunedPages?: number[] // Phase 4: Non-destructive page exclusion layer
 }
 
 export interface Content { id: string; pages: string[] }
@@ -71,6 +72,7 @@ class InklingDB extends Dexie {
   constructor() {
     super('inkling')
     this.version(1).stores({ books: 'id, addedAt', contents: 'id', annotations: 'id, bookId', prefs: '' })
+    this.version(2).stores({ books: 'id, addedAt', contents: 'id', annotations: 'id, bookId, page, [bookId+page]', prefs: '' })
   }
 }
 

@@ -1,11 +1,23 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { Library, NotebookPen, Feather, Maximize2, Minimize2, Columns2, Link2, Unlink2 } from 'lucide-react'
+import { Library, NotebookPen, Feather, Maximize2, Minimize2, Columns2, Link2, Unlink2, Trash2, X, FileText } from 'lucide-react'
 import { useStore } from '../store.ts'
 import { Page } from './Page.tsx'
 import { SelectionPopover } from './SelectionPopover.tsx'
 import { Quotebook } from './Quotebook.tsx'
 import { Customizer, FONTS } from './Customizer.tsx'
 import { ReadingScrubber } from './ReadingScrubber.tsx'
+
+export const getNextVisiblePage = (current: number, pruned: number[] = [], total: number): number => {
+  let next = current + 1
+  while (next < total && pruned.includes(next)) next++
+  return Math.min(next, total - 1)
+}
+
+export const getPrevVisiblePage = (current: number, pruned: number[] = []): number => {
+  let prev = current - 1
+  while (prev >= 0 && pruned.includes(prev)) prev--
+  return Math.max(prev, 0)
+}
 
 export const goToPage = (i: number, behavior: ScrollBehavior = 'smooth') => {
   const el = document.querySelector(`[data-page="${i}"]`)
@@ -28,6 +40,8 @@ export function Reader() {
   const comparativeNotes = useStore((s) => s.comparativeNotes)
   const syncScroll = useStore((s) => s.syncScroll)
   const books = useStore((s) => s.books)
+  const prunedSnackbar = useStore((s) => s.prunedSnackbar)
+  const managePrunedOpen = useStore((s) => s.managePrunedOpen)
   const {
     closeBook,
     toggleDrawer,
@@ -36,6 +50,11 @@ export function Reader() {
     setComparativeBook,
     setComparativeNotes,
     toggleSyncScroll,
+    undoPrune,
+    dismissPrunedSnackbar,
+    toggleManagePruned,
+    restorePage,
+    restoreAllPages,
   } = useStore.getState()
 
   const [current] = useState(book.page)
@@ -80,17 +99,19 @@ export function Reader() {
         const now = Date.now()
         const behavior = now - lastTurnTimeRef.current < 260 ? 'instant' : 'smooth'
         lastTurnTimeRef.current = now
-        const next = Math.min(currentRef.current + 1, pages.length - 1)
+        const next = getNextVisiblePage(currentRef.current, book.prunedPages, pages.length)
         goToPage(next, behavior)
       } else if (e.key === 'k' || e.key === 'ArrowLeft' || e.key === 'PageUp') {
         e.preventDefault()
         const now = Date.now()
         const behavior = now - lastTurnTimeRef.current < 260 ? 'instant' : 'smooth'
         lastTurnTimeRef.current = now
-        const prev = Math.max(currentRef.current - 1, 0)
+        const prev = getPrevVisiblePage(currentRef.current, book.prunedPages)
         goToPage(prev, behavior)
       } else if (e.key === 'Escape') {
-        if (drawer) {
+        if (managePrunedOpen) {
+          toggleManagePruned(false)
+        } else if (drawer) {
           toggleDrawer(false)
         } else if (focusMode) {
           toggleFocusMode(false)
@@ -100,7 +121,7 @@ export function Reader() {
 
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [drawer, focusMode, pages.length, toggleDrawer, toggleFocusMode])
+  }, [drawer, focusMode, managePrunedOpen, pages.length, book.prunedPages, toggleDrawer, toggleFocusMode, toggleManagePruned])
 
   const vars = {
     '--read-font': FONTS[prefs.font].family,
@@ -135,8 +156,21 @@ export function Reader() {
         <div className="min-w-0 flex-1 text-center">
           <h1 className="truncate text-base italic leading-tight font-serif">{book.title}</h1>
           <div className="flex items-center justify-center gap-2 text-[12px] text-soft">
-            <span className="smallcaps truncate">
-              {book.author || 'Unknown author'} · page <span id="header-current-page">{current + 1}</span> of {pages.length}
+            <span className="smallcaps truncate inline-flex items-center gap-1.5">
+              <span>{book.author || 'Unknown author'}</span>
+              <span>·</span>
+              <span>page <span id="header-current-page">{current + 1}</span> of {pages.length}</span>
+              {(book.prunedPages?.length ?? 0) > 0 && (
+                <button
+                  type="button"
+                  onClick={() => toggleManagePruned(true)}
+                  className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-sans font-medium text-amber-800 hover:bg-amber-500/20 cursor-pointer"
+                  title="Review and restore excluded pages"
+                >
+                  <Trash2 size={10} strokeWidth={1.5} />
+                  <span>{book.prunedPages!.length} hidden</span>
+                </button>
+              )}
             </span>
             {isSaving && (
               <span className="flex items-center gap-1 text-[11px] text-accent animate-pulse" title="Saving thought to browser storage">
@@ -294,6 +328,99 @@ export function Reader() {
 
       {/* Bottom Reading Ribbon Scrubber with HUD Pill (Direct DOM Zero Re-render) */}
       <ReadingScrubber totalPages={pages.length} initialPage={current} pagesHtml={pages} />
+
+      {/* 6-Second Floating Snackbar for Page Pruning */}
+      {prunedSnackbar && (
+        <div className="fixed bottom-14 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-full border border-line bg-card/95 px-4 py-2 font-serif text-xs text-ink shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <span className="flex items-center gap-1.5 text-amber-700">
+            <Trash2 size={13} strokeWidth={1.5} />
+            <span>Page {prunedSnackbar.page + 1} hidden</span>
+          </span>
+          <span className="text-line">|</span>
+          <button
+            onClick={() => void undoPrune()}
+            className="font-sans font-semibold text-accent hover:underline cursor-pointer"
+          >
+            Undo
+          </button>
+          <button
+            onClick={() => dismissPrunedSnackbar()}
+            className="text-soft hover:text-ink cursor-pointer ml-1"
+            aria-label="Dismiss"
+          >
+            <X size={12} strokeWidth={1.5} />
+          </button>
+        </div>
+      )}
+
+      {/* Manage Pruned Pages Recovery Modal */}
+      {managePrunedOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/20 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="grain w-full max-w-lg rounded-sm border border-line bg-card p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <div>
+                <h3 className="font-serif italic font-semibold text-base">Excluded & Pruned Pages</h3>
+                <p className="text-xs text-soft">Blank pages or scan artifacts excluded from reading flow</p>
+              </div>
+              <button
+                onClick={() => toggleManagePruned(false)}
+                className="text-soft hover:text-ink cursor-pointer p-1"
+                aria-label="Close"
+              >
+                <X size={18} strokeWidth={1.5} />
+              </button>
+            </div>
+
+            {(!book.prunedPages || book.prunedPages.length === 0) ? (
+              <div className="py-8 text-center text-soft text-sm font-serif italic">
+                <FileText size={28} strokeWidth={1.5} className="mx-auto mb-2 opacity-40" />
+                No pages are currently hidden.
+              </div>
+            ) : (
+              <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
+                {book.prunedPages.map((pageIdx) => {
+                  const preview = pages[pageIdx]?.replace(/<[^>]+>/g, '').trim().slice(0, 90) || 'Blank page / No text'
+                  return (
+                    <div
+                      key={pageIdx}
+                      className="flex items-center justify-between gap-3 rounded border border-line bg-paper/60 p-2.5 text-xs"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <span className="font-semibold smallcaps text-soft">Page {pageIdx + 1}:</span>
+                        <p className="truncate text-soft/80 italic font-serif mt-0.5">"{preview}"</p>
+                      </div>
+                      <button
+                        onClick={() => void restorePage(pageIdx)}
+                        className="rounded border border-line bg-card px-2.5 py-1 text-xs font-sans text-accent hover:border-accent cursor-pointer shrink-0"
+                      >
+                        Restore Page
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between border-t border-line pt-3">
+              {(book.prunedPages?.length ?? 0) > 0 && (
+                <button
+                  onClick={() => void restoreAllPages()}
+                  className="text-xs font-sans text-amber-700 hover:underline cursor-pointer"
+                >
+                  Restore All Pages
+                </button>
+              )}
+              <div className="flex-1" />
+              <button
+                onClick={() => toggleManagePruned(false)}
+                className="rounded bg-ink px-4 py-1.5 text-xs text-paper font-sans cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <SelectionPopover />
       <Quotebook />

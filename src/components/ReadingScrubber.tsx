@@ -66,13 +66,14 @@ export const ReadingScrubber = memo(function ReadingScrubber({ totalPages, initi
         hudChapterRef.current.textContent = chapterTitle
       }
       if (hudPageRef.current) {
-        hudPageRef.current.textContent = `Page ${pageIndex + 1} of ${totalPages}`
+        const prunedCount = book.prunedPages?.length ?? 0
+        hudPageRef.current.textContent = `Page ${pageIndex + 1} of ${totalPages}${prunedCount > 0 ? ` (${prunedCount} hidden)` : ''}`
       }
       if (hudPctRef.current) {
         hudPctRef.current.textContent = `(${Math.round(clampedRatio * 100)}%)`
       }
     },
-    [totalPages],
+    [totalPages, book.prunedPages],
   )
 
   // Initialize visual positions on mount
@@ -159,7 +160,19 @@ export const ReadingScrubber = memo(function ReadingScrubber({ totalPages, initi
       if (!trackRef.current) return
       const rect = trackRef.current.getBoundingClientRect()
       const ratio = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width))
-      const pageIndex = Math.min(totalPages - 1, Math.max(0, Math.round(ratio * (totalPages - 1))))
+      let pageIndex = Math.min(totalPages - 1, Math.max(0, Math.round(ratio * (totalPages - 1))))
+      const pruned = book.prunedPages ?? []
+      if (pruned.includes(pageIndex)) {
+        let candidate = pageIndex
+        while (candidate < totalPages && pruned.includes(candidate)) candidate++
+        if (candidate < totalPages) {
+          pageIndex = candidate
+        } else {
+          candidate = pageIndex
+          while (candidate >= 0 && pruned.includes(candidate)) candidate--
+          if (candidate >= 0) pageIndex = candidate
+        }
+      }
       const ch = chaptersReversed.find((c) => c.page <= pageIndex)?.title || 'Chapter I'
 
       updateVisuals(ratio, pageIndex, ch)

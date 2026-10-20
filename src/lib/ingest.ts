@@ -3,12 +3,36 @@
 import type { Book, Format } from './db.ts'
 import { countWords, esc, mdToChapters, paginate } from './text.ts'
 
-export type Ingested = Pick<Book, 'title' | 'author' | 'year' | 'publisher' | 'format' | 'pageCount' | 'wordCount'> & { pages: string[] }
+export type Ingested = Pick<Book, 'title' | 'author' | 'year' | 'publisher' | 'format' | 'pageCount' | 'wordCount'> & {
+  pages: string[]
+  prunedPages?: number[]
+}
 
 export const ACCEPT = '.epub,.pdf,.md,.markdown,.txt'
 
 const prettyName = (name: string) =>
   name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+
+export const yieldToMain = () =>
+  new Promise<void>((resolve) => {
+    if (
+      typeof window !== 'undefined' &&
+      'scheduler' in window &&
+      typeof (window as unknown as { scheduler?: { yield?: () => Promise<void> } }).scheduler?.yield === 'function'
+    ) {
+      (window as unknown as { scheduler: { yield: () => Promise<void> } }).scheduler.yield().then(resolve)
+    } else {
+      setTimeout(resolve, 0)
+    }
+  })
+
+const isBlankPage = (html: string): boolean => {
+  const stripped = html.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim()
+  return (
+    stripped.length === 0 ||
+    stripped === 'No text layer on this page (scanned image).'
+  )
+}
 
 export async function ingest(file: File): Promise<Ingested> {
   const ext = file.name.split('.').pop()?.toLowerCase()
@@ -39,7 +63,22 @@ export async function ingest(file: File): Promise<Ingested> {
 
   if (!pages.length) throw new Error('No readable text found in this file.')
   const clean = Object.fromEntries(Object.entries(meta).filter(([, v]) => v?.trim()))
-  return { ...base, ...clean, format, pages, pageCount: pages.length, wordCount: pages.reduce((n, p) => n + countWords(p), 0) }
+
+  // Automatically mark empty/placeholder flyleaves as initial pruned pages (can be restored anytime)
+  const prunedPages: number[] = []
+  pages.forEach((p, idx) => {
+    if (isBlankPage(p)) prunedPages.push(idx)
+  })
+
+  return {
+    ...base,
+    ...clean,
+    format,
+    pages,
+    prunedPages,
+    pageCount: pages.length,
+    wordCount: pages.reduce((n, p) => n + countWords(p), 0),
+  }
 }
 
 // ── EPUB ──────────────────────────────────────────────────────────────────────
@@ -84,7 +123,14 @@ async function fromEpub(file: File) {
   const sections: { load: (r: unknown) => Promise<Element>; unload: () => void }[] = []
   book.spine.each((s: (typeof sections)[number]) => sections.push(s))
   const chapters: string[][] = []
+
+  let lastYield = performance.now()
   for (const s of sections) {
+    // Yield every 12ms to prevent main-thread freezing on large books
+    if (performance.now() - lastYield > 12) {
+      await yieldToMain()
+      lastYield = performance.now()
+    }
     const el = await s.load(book.load.bind(book))
     chapters.push(blocks(el.getElementsByTagName('body')[0] ?? el))
     s.unload()
@@ -129,9 +175,18 @@ async function fromPdf(file: File) {
   const doc = await task.promise
   const info = ((await doc.getMetadata()).info ?? {}) as { Title?: string; Author?: string; CreationDate?: string }
   const pages: string[] = []
+
+  let lastYield = performance.now()
   for (let i = 1; i <= doc.numPages; i++) {
-    const tc = await (await doc.getPage(i)).getTextContent()
+    // Yield every 12ms to keep UI snappy even with 300+ pages
+    if (performance.now() - lastYield > 12) {
+      await yieldToMain()
+      lastYield = performance.now()
+    }
+    const page = await doc.getPage(i)
+    const tc = await page.getTextContent()
     pages.push(pdfPage(tc.items.filter((it): it is PdfItem & typeof it => 'str' in it)))
+    page.cleanup() // Free memory for this page immediately
   }
   await doc.cleanup()
   await task.destroy()

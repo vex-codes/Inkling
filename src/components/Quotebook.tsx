@@ -43,7 +43,7 @@ export function Quotebook() {
     return toMarkdown(book, notes, activeStyle)
   }, [book, notes, activeStyle])
 
-  if (!drawer || !book) return null
+  if (!book) return null
 
   const handleCopyCitation = async (noteId: string, quote: string, page: number, style: Style) => {
     const formatted = formatQuote(style, quote, book, page + 1)
@@ -77,10 +77,20 @@ export function Quotebook() {
 
   return (
     <>
+      {/* Backdrop for click outside (isolated overlay) */}
+      <div
+        onClick={() => toggleDrawer(false)}
+        className={`fixed inset-0 z-30 bg-ink/10 backdrop-blur-[1px] transition-opacity duration-300 ${
+          drawer ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        }`}
+        aria-hidden="true"
+      />
       <aside
         role="complementary"
         aria-label="Quotebook & Academic Synthesis"
-        className="grain fixed inset-y-0 right-0 z-40 flex w-full max-w-[min(480px,90vw)] min-h-dvh flex-col border-l border-line bg-card shadow-2xl transition-transform duration-300 ease-in-out"
+        className={`grain fixed inset-y-0 right-0 z-40 flex w-full max-w-[min(480px,90vw)] min-h-dvh flex-col border-l border-line bg-card shadow-2xl transition-transform duration-300 ease-out will-change-transform ${
+          drawer ? 'translate-x-0 pointer-events-auto' : 'translate-x-full pointer-events-none'
+        }`}
       >
         {/* Header (p-6 standard) */}
         <div className="flex items-center justify-between border-b border-line px-6 py-4">

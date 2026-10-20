@@ -34,6 +34,8 @@ interface State {
   syncScroll: boolean
   deletedStash: DeletedStash | null
   storageWarning: string | null
+  prunedSnackbar: { page: number; timerId: number } | null
+  managePrunedOpen: boolean
   init(): Promise<void>
   setPrefs(p: Partial<Prefs>): void
   setFastScrolling(active: boolean): void
@@ -42,6 +44,12 @@ interface State {
   setComparativeBook(id: string | null): Promise<void>
   setComparativeNotes(notes: string): void
   toggleSyncScroll(on?: boolean): void
+  prunePage(pageIndex: number): Promise<void>
+  restorePage(pageIndex: number): Promise<void>
+  restoreAllPages(): Promise<void>
+  undoPrune(): Promise<void>
+  dismissPrunedSnackbar(): void
+  toggleManagePruned(open?: boolean): void
   addBook(file: File): Promise<void>
   stageRemoveBook(id: string): Promise<void>
   undoRemoveBook(): Promise<void>
@@ -109,6 +117,7 @@ export const useStore = create<State>()((set, get) => {
       dogears: [],
       flags: [{ id: uid(), page: 0, color: 'rose', label: 'Narrator' }],
       legend: { ...DEFAULT_LEGEND },
+      prunedPages: [],
     }
     const seeds: [string, Kind, Ink, string][] = [
       ['reserve all judgements', 'highlight', 'rose', 'Claims to withhold judgement — then judges everyone. Reliable narrator?'],
@@ -170,6 +179,8 @@ export const useStore = create<State>()((set, get) => {
     syncScroll: true,
     deletedStash: null,
     storageWarning: null,
+    prunedSnackbar: null,
+    managePrunedOpen: false,
 
     async init() {
       const prefs = { ...DEFAULT_PREFS, ...(await db.prefs.get('reader')) }
@@ -196,9 +207,68 @@ export const useStore = create<State>()((set, get) => {
       persist(db.prefs.put(prefs, 'reader'))
     },
 
+    async prunePage(pageIndex: number) {
+      const b = get().book
+      if (!b) return
+      const currentPruned = b.prunedPages ?? []
+      if (currentPruned.includes(pageIndex)) return
+      const nextPruned = [...currentPruned, pageIndex].sort((a, b) => a - b)
+      patchBook({ prunedPages: nextPruned })
+
+      if (get().prunedSnackbar?.timerId) {
+        window.clearTimeout(get().prunedSnackbar!.timerId)
+      }
+      const timerId = window.setTimeout(() => {
+        set({ prunedSnackbar: null })
+      }, 6000)
+
+      set({
+        prunedSnackbar: { page: pageIndex, timerId },
+      })
+    },
+
+    async restorePage(pageIndex: number) {
+      const b = get().book
+      if (!b) return
+      const currentPruned = b.prunedPages ?? []
+      const nextPruned = currentPruned.filter((p) => p !== pageIndex)
+      patchBook({ prunedPages: nextPruned })
+      if (get().prunedSnackbar?.page === pageIndex) {
+        window.clearTimeout(get().prunedSnackbar!.timerId)
+        set({ prunedSnackbar: null })
+      }
+    },
+
+    async restoreAllPages() {
+      const b = get().book
+      if (!b) return
+      patchBook({ prunedPages: [] })
+      if (get().prunedSnackbar) {
+        window.clearTimeout(get().prunedSnackbar!.timerId)
+        set({ prunedSnackbar: null })
+      }
+    },
+
+    async undoPrune() {
+      const snack = get().prunedSnackbar
+      if (!snack) return
+      await get().restorePage(snack.page)
+    },
+
+    dismissPrunedSnackbar() {
+      if (get().prunedSnackbar?.timerId) {
+        window.clearTimeout(get().prunedSnackbar!.timerId)
+      }
+      set({ prunedSnackbar: null })
+    },
+
+    toggleManagePruned(open?: boolean) {
+      set({ managePrunedOpen: open ?? !get().managePrunedOpen })
+    },
+
     async addBook(file) {
       signalSave()
-      const { pages, ...meta } = await ingest(file)
+      const { pages, prunedPages, ...meta } = await ingest(file)
       const book: Book = {
         ...meta,
         id: uid(),
@@ -207,6 +277,7 @@ export const useStore = create<State>()((set, get) => {
         dogears: [],
         flags: [],
         legend: { ...DEFAULT_LEGEND },
+        prunedPages: prunedPages ?? [],
       }
       await db.transaction('rw', db.books, db.contents, async () => {
         await db.books.put(book)
@@ -323,7 +394,7 @@ export const useStore = create<State>()((set, get) => {
       ])
       if (!book || !content) return
       set({
-        book: { ...book, legend: { ...DEFAULT_LEGEND, ...book.legend } },
+        book: { ...book, legend: { ...DEFAULT_LEGEND, ...book.legend }, prunedPages: book.prunedPages ?? [] },
         pages: content.pages,
         notes,
         focusId: null,

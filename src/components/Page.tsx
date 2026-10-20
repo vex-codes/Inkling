@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { Flag as FlagIcon } from 'lucide-react'
+import { Flag as FlagIcon, Trash2 } from 'lucide-react'
 import { useStore } from '../store.ts'
 import { INKS, type Flag, type Ink } from '../lib/db.ts'
 import { layer, layerFor, rangeFrom } from '../lib/anchor.ts'
@@ -32,6 +32,9 @@ export const Page = memo(function Page({ index, html }: { index: number; html: s
   const flags = useStore(useShallow((s) => s.book?.flags.filter((f) => f.page === index) ?? []))
   const folded = useStore((s) => !!s.book?.dogears.includes(index))
   const toggleDogear = useStore((s) => s.toggleDogear)
+  const isPruned = useStore((s) => s.book?.prunedPages?.includes(index) ?? false)
+  const prunePage = useStore((s) => s.prunePage)
+  const [isCollapsing, setIsCollapsing] = useState(false)
 
   const wrapRef = useRef<HTMLDivElement>(null)
   const sheetRef = useRef<HTMLElement>(null)
@@ -216,10 +219,33 @@ export const Page = memo(function Page({ index, html }: { index: number; html: s
     )
   }
 
+  const handleHidePage = () => {
+    setIsCollapsing(true)
+    setTimeout(() => {
+      void prunePage(index)
+    }, 200)
+  }
+
+  if (isPruned && !isCollapsing) {
+    return null
+  }
+
   return (
     <div ref={wrapRef} data-page={index} className="sheet-wrap reader-page-container w-full scroll-mt-20">
       <div className="relative mx-auto w-fit max-w-full">
-        <article ref={sheetRef} data-folded={folded} aria-label={`Page ${index + 1}`} className="sheet grain">
+        <article
+          ref={sheetRef}
+          data-folded={folded}
+          aria-label={`Page ${index + 1}`}
+          className="sheet grain transition-all duration-200"
+          style={{
+            transform: isCollapsing ? 'scaleY(0) translate3d(0, -24px, 0)' : 'scaleY(1)',
+            transformOrigin: 'top center',
+            opacity: isCollapsing ? 0 : 1,
+            maxHeight: isCollapsing ? 0 : undefined,
+            overflow: isCollapsing ? 'hidden' : undefined,
+          }}
+        >
           <div className="flex h-14 items-end px-6">
             <button
               onClick={() => setEditing(editing ? null : 'new')}
@@ -262,7 +288,21 @@ export const Page = memo(function Page({ index, html }: { index: number; html: s
             </aside>
           </div>
 
-          <footer className="smallcaps pb-8 text-center text-soft">{index + 1}</footer>
+          <footer className="smallcaps pb-8 px-8 text-center text-soft flex items-center justify-between">
+            <span className="w-20" />
+            <span className="flex-1">{index + 1}</span>
+            <div className="w-20 flex justify-end">
+              <button
+                type="button"
+                onClick={handleHidePage}
+                className="opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 [.sheet:hover_&]:opacity-100 flex items-center gap-1 text-[11px] text-[#B45309] hover:bg-amber-500/10 px-2 py-0.5 rounded cursor-pointer"
+                title="Hide / Prune blank page or scanner artifact"
+              >
+                <Trash2 size={12} strokeWidth={1.5} />
+                <span className="font-sans normal-case">Hide</span>
+              </button>
+            </div>
+          </footer>
 
           <button
             onClick={() => toggleDogear(index)}
