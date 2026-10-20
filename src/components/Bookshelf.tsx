@@ -17,7 +17,7 @@ import {
   AlertCircle,
 } from 'lucide-react'
 import { useStore } from '../store.ts'
-import { ACCEPT } from '../lib/ingest.ts'
+import { ACCEPT } from '../services/bookIngestion.ts'
 import { Customizer } from './Customizer.tsx'
 import { toMarkdown } from '../lib/text.ts'
 import { db, type Book } from '../lib/db.ts'

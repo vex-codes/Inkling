@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { db, DEFAULT_LEGEND, DEFAULT_PREFS, type Annotation, type Book, type Flag, type Ink, type Kind, type Prefs } from './lib/db.ts'
 import { findInHtml, clearAllHighlightLayers } from './lib/anchor.ts'
-import { ingest } from './lib/ingest.ts'
+import { ingest } from './services/bookIngestion.ts'
 import { countWords, mdToChapters, paginate } from './lib/text.ts'
 import { extractTocFromMarkdown, extractTocFromPages } from './services/tocExtractor.ts'
 import gatsby from './sample/gatsby-ch1.md?raw'
