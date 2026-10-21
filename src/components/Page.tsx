@@ -66,7 +66,7 @@ export const Page = memo(function Page({ index, html }: { index: number; html: s
     if (!near || !root) return
     const painted: [Highlight, Range][] = []
     for (const n of sorted) {
-      const r = rangeFrom(root, n.start, n.end)
+      const r = rangeFrom(root, n.start, n.end, n.quote)
       if (!r) continue
       ranges.current.set(n.id, r)
       const h = layerFor(n)

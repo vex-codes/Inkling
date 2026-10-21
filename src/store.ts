@@ -1,9 +1,10 @@
 import { create } from 'zustand'
-import { db, DEFAULT_LEGEND, DEFAULT_PREFS, type Annotation, type Book, type Flag, type Ink, type Kind, type Prefs } from './lib/db.ts'
+import { db, DEFAULT_LEGEND, DEFAULT_PREFS, migrateLegacyDatabase, type Annotation, type Book, type Flag, type Ink, type Kind, type Prefs } from './lib/db.ts'
 import { findInHtml, clearAllHighlightLayers } from './lib/anchor.ts'
 import { ingest } from './services/bookIngestion.ts'
 import { countWords, mdToChapters, paginate } from './lib/text.ts'
 import { extractTocFromMarkdown, extractTocFromPages } from './services/tocExtractor.ts'
+import { exportBookArchive, exportStudyNotesMarkdown, importBookArchive } from './services/backupService.ts'
 import gatsby from './sample/gatsby-ch1.md?raw'
 
 type NewMark = Pick<Annotation, 'page' | 'start' | 'end' | 'quote' | 'kind' | 'color'>
@@ -53,6 +54,9 @@ interface State {
   dismissPrunedSnackbar(): void
   toggleManagePruned(open?: boolean): void
   addBook(file: File): Promise<void>
+  importBinder(file: File): Promise<string>
+  exportBinder(bookId: string): Promise<void>
+  exportNotes(bookId: string): Promise<void>
   stageRemoveBook(id: string): Promise<void>
   undoRemoveBook(): Promise<void>
   commitRemoveBook(): Promise<void>
@@ -190,11 +194,13 @@ export const useStore = create<State>()((set, get) => {
     managePrunedOpen: false,
 
     async init() {
+      await migrateLegacyDatabase()
       const prefs = { ...DEFAULT_PREFS, ...(await db.prefs.get('reader')) }
       let books = await db.books.orderBy('addedAt').toArray()
+      const bookCount = await db.books.count()
       const alreadySeeded = localStorage.getItem(SEEDED_KEY)
 
-      if (!books.length && !alreadySeeded) {
+      if (bookCount === 0 && !alreadySeeded) {
         const sample = await seedSample()
         books = [sample]
         prefs.lastBook = sample.id
@@ -274,6 +280,10 @@ export const useStore = create<State>()((set, get) => {
     },
 
     async addBook(file) {
+      if (file.name.toLowerCase().endsWith('.inkling')) {
+        await get().importBinder(file)
+        return
+      }
       signalSave()
       const { pages, prunedPages, toc, ...meta } = await ingest(file)
       const book: Book = {
@@ -289,10 +299,28 @@ export const useStore = create<State>()((set, get) => {
       }
       await db.transaction('rw', db.books, db.contents, async () => {
         await db.books.put(book)
-        await db.contents.put({ id: book.id, pages })
+        await db.contents.put({ id: book.id, pages, rawFile: file })
       })
       set({ books: [...get().books, book] })
       void checkStorageQuota()
+    },
+
+    async importBinder(file) {
+      signalSave()
+      const bookId = await importBookArchive(file)
+      const books = await db.books.orderBy('addedAt').toArray()
+      set({ books })
+      await get().openBook(bookId)
+      void checkStorageQuota()
+      return bookId
+    },
+
+    async exportBinder(bookId) {
+      await exportBookArchive(bookId)
+    },
+
+    async exportNotes(bookId) {
+      await exportStudyNotesMarkdown(bookId)
     },
 
     async stageRemoveBook(id) {

@@ -15,7 +15,7 @@ export type IngestedBook = Pick<Book, 'title' | 'author' | 'year' | 'publisher' 
   toc?: TocItem[]
 }
 
-export const ACCEPT = '.epub,.pdf,.md,.markdown,.txt'
+export const ACCEPT = '.epub,.pdf,.md,.markdown,.txt,.inkling'
 
 export const yieldToMain = () =>
   new Promise<void>((resolve) => {

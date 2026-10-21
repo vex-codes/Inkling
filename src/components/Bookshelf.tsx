@@ -15,12 +15,13 @@ import {
   BookMarked,
   X,
   AlertCircle,
+  FolderArchive,
 } from 'lucide-react'
 import { useStore } from '../store.ts'
 import { ACCEPT } from '../services/bookIngestion.ts'
 import { Customizer } from './Customizer.tsx'
-import { toMarkdown } from '../lib/text.ts'
-import { db, type Book } from '../lib/db.ts'
+import { type Book } from '../lib/db.ts'
+import { exportBookArchive, exportStudyNotesMarkdown } from '../services/backupService.ts'
 
 const CLOTH_PALETTES = [
   '#4a151b', // Burgundy
@@ -34,11 +35,12 @@ export function Bookshelf() {
   const books = useStore((s) => s.books)
   const isSaving = useStore((s) => s.isSaving)
   const storageWarning = useStore((s) => s.storageWarning)
-  const { openBook, stageRemoveBook, addBook, renameBook, reseedSample, backupSanctuary, restoreSanctuary } =
+  const { openBook, stageRemoveBook, addBook, importBinder, renameBook, reseedSample, backupSanctuary, restoreSanctuary } =
     useStore.getState()
 
   const [isDragging, setIsDragging] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [isRestoringBinder, setIsRestoringBinder] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null)
   const [editingBook, setEditingBook] = useState<Book | null>(null)
@@ -51,16 +53,26 @@ export function Bookshelf() {
 
   const handleFile = async (file: File) => {
     setError(null)
-    setIsUploading(true)
+    const isBinder = file.name.toLowerCase().endsWith('.inkling')
+    if (isBinder) {
+      setIsRestoringBinder(true)
+    } else {
+      setIsUploading(true)
+    }
     try {
       if (file.size === 0) {
-        throw new Error('This document is empty (0 bytes). Please select a valid EPUB, PDF, or Markdown file.')
+        throw new Error('This document is empty (0 bytes). Please select a valid EPUB, PDF, Markdown, or .inkling binder file.')
       }
-      await addBook(file)
+      if (isBinder) {
+        await importBinder(file)
+      } else {
+        await addBook(file)
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to ingest document')
     } finally {
       setIsUploading(false)
+      setIsRestoringBinder(false)
     }
   }
 
@@ -95,17 +107,22 @@ export function Bookshelf() {
     setEditingBook(null)
   }
 
+  const handleExportBinder = async (b: Book) => {
+    setActiveMenuId(null)
+    try {
+      await exportBookArchive(b.id)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to export digital binder')
+    }
+  }
+
   const handleExportNotes = async (b: Book) => {
     setActiveMenuId(null)
-    const notes = await db.annotations.where('bookId').equals(b.id).toArray()
-    const md = toMarkdown(b, notes, 'mla')
-    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${b.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_Quotebook.md`
-    a.click()
-    URL.revokeObjectURL(url)
+    try {
+      await exportStudyNotesMarkdown(b.id)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to export study notes')
+    }
   }
 
   const handleDownloadBackup = async () => {
@@ -225,6 +242,20 @@ export function Bookshelf() {
             <span className="smallcaps">Instant Academic Citations</span>
           </div>
         </div>
+
+        {isRestoringBinder && (
+          <div className="mb-6 flex items-center justify-center gap-2.5 rounded bg-amber-500/10 p-3.5 text-xs text-amber-950 border border-amber-300/80 animate-pulse shadow-xs">
+            <span className="size-2 rounded-full bg-accent animate-ping" />
+            <span className="font-serif text-sm font-medium">Restoring Binder… hydrating marginalia and reading progress</span>
+          </div>
+        )}
+
+        {isUploading && !isRestoringBinder && (
+          <div className="mb-6 flex items-center justify-center gap-2.5 rounded bg-ink/5 p-3 text-xs text-soft border border-line animate-pulse">
+            <span className="size-2 rounded-full bg-soft" />
+            <span className="font-serif text-sm">Binding document into your sanctuary…</span>
+          </div>
+        )}
 
         {storageWarning && (
           <div className="mb-6 flex items-center justify-center gap-2 rounded bg-amber-500/10 p-3 text-xs text-amber-900 border border-amber-300">
@@ -346,22 +377,30 @@ export function Bookshelf() {
                           {isMenuOpen && (
                             <div
                               onClick={(e) => e.stopPropagation()}
-                              className="grain absolute right-0 bottom-full mb-1 z-30 w-44 rounded border border-line bg-card p-1 shadow-xl animate-in fade-in zoom-in-95 text-left"
+                              className="grain absolute right-0 bottom-full mb-1 z-30 w-56 rounded border border-line bg-card p-1 shadow-xl animate-in fade-in zoom-in-95 text-left"
                             >
+                              <button
+                                onClick={() => void handleExportBinder(b)}
+                                className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-xs text-ink transition hover:bg-paper font-medium"
+                              >
+                                <FolderArchive size={13} className="text-accent" />
+                                <span>Export Digital Binder (.inkling)</span>
+                              </button>
+
+                              <button
+                                onClick={() => void handleExportNotes(b)}
+                                className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-xs text-ink transition hover:bg-paper"
+                              >
+                                <FileDown size={13} className="text-soft" />
+                                <span>Export Notes to Markdown (.md)</span>
+                              </button>
+
                               <button
                                 onClick={() => handleOpenRename(b)}
                                 className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-xs text-ink transition hover:bg-paper"
                               >
                                 <Edit3 size={13} className="text-soft" />
                                 <span>Details / Rename</span>
-                              </button>
-
-                              <button
-                                onClick={() => handleExportNotes(b)}
-                                className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-xs text-ink transition hover:bg-paper"
-                              >
-                                <Download size={13} className="text-soft" />
-                                <span>Export Notes (.md)</span>
                               </button>
 
                               <div className="my-1 border-t border-line/50" />
@@ -374,7 +413,7 @@ export function Bookshelf() {
                                 className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-xs text-[#8C3B2E] transition hover:bg-red-500/10 font-medium"
                               >
                                 <Trash2 size={13} />
-                                <span>Remove from Library</span>
+                                <span>Delete Book</span>
                               </button>
                             </div>
                           )}
@@ -394,7 +433,7 @@ export function Bookshelf() {
                   <Upload size={20} strokeWidth={1.6} />
                 </div>
                 <h4 className="mt-3 font-serif text-sm font-medium text-ink">Add New Work</h4>
-                <p className="mt-1 text-[11px] text-soft">Drag & drop EPUB, PDF, or Markdown here</p>
+                <p className="mt-1 text-[11px] text-soft">Drag & drop EPUB, PDF, Markdown, or .inkling</p>
               </div>
             </div>
           )}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { Library, NotebookPen, Feather, Maximize2, Minimize2, Columns2, Link2, Unlink2, Trash2, X, FileText, BookOpen } from 'lucide-react'
+import { Library, NotebookPen, Feather, Maximize2, Minimize2, Columns2, Link2, Unlink2, Trash2, X, FileText, BookOpen, FolderArchive } from 'lucide-react'
 import { useStore } from '../store.ts'
 import { Page } from './Page.tsx'
 import { SelectionPopover } from './SelectionPopover.tsx'
@@ -7,6 +7,7 @@ import { Quotebook } from './Quotebook.tsx'
 import { ChapterDrawer } from './ChapterDrawer.tsx'
 import { Customizer, FONTS } from './Customizer.tsx'
 import { ReadingScrubber } from './ReadingScrubber.tsx'
+import { exportBookArchive } from '../services/backupService.ts'
 
 declare global {
   interface Window {
@@ -67,8 +68,20 @@ export function Reader() {
   } = useStore.getState()
 
   const [current] = useState(book.page)
+  const [isExporting, setIsExporting] = useState(false)
   const currentRef = useRef(book.page)
   const lastTurnTimeRef = useRef(0)
+
+  const handleExportBinder = async () => {
+    try {
+      setIsExporting(true)
+      await exportBookArchive(book.id)
+    } catch (err) {
+      console.error('[Reader] Failed to export binder:', err)
+    } finally {
+      setIsExporting(false)
+    }
+  }
 
   useEffect(() => {
     let ticking = false
@@ -115,8 +128,12 @@ export function Reader() {
 
   // Reopen where the reader left off
   useEffect(() => {
-    if (currentRef.current) {
+    if (currentRef.current > 0) {
       goToPage(currentRef.current, 'instant')
+      const timer = setTimeout(() => {
+        goToPage(currentRef.current, 'instant')
+      }, 75)
+      return () => clearTimeout(timer)
     }
   }, [book.id])
 
@@ -254,6 +271,17 @@ export function Reader() {
         </div>
 
         <div className="flex items-center gap-1.5">
+
+          {/* Export Digital Binder button */}
+          <button
+            onClick={() => void handleExportBinder()}
+            disabled={isExporting}
+            className="grid size-9 place-items-center rounded-md text-soft transition hover:bg-line hover:text-ink focus-visible:bg-line disabled:opacity-50"
+            aria-label="Export Digital Binder (.inkling)"
+            title="Export Digital Binder (.inkling)"
+          >
+            <FolderArchive size={18} strokeWidth={1.5} className={isExporting ? 'animate-pulse text-accent' : ''} />
+          </button>
 
           {/* Comparative Split-View button */}
           <button

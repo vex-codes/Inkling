@@ -39,7 +39,11 @@ export interface Book {
   toc?: TocItem[]
 }
 
-export interface Content { id: string; pages: string[] }
+export interface Content {
+  id: string
+  pages: string[]
+  rawFile?: Blob
+}
 
 /** Anchored by character offsets into a page's text content. */
 export interface Annotation {
@@ -81,10 +85,65 @@ class InklingDB extends Dexie {
   prefs!: Table<Prefs, string>
 
   constructor() {
-    super('inkling')
+    super('InklingDatabase')
     this.version(1).stores({ books: 'id, addedAt', contents: 'id', annotations: 'id, bookId', prefs: '' })
     this.version(2).stores({ books: 'id, addedAt', contents: 'id', annotations: 'id, bookId, page, [bookId+page]', prefs: '' })
   }
 }
 
 export const db = new InklingDB()
+
+/**
+ * Migration guardrail:
+ * Checks if legacy 'inkling' database exists from before the permanent name lock.
+ * If 'InklingDatabase' has no books, safely imports legacy records without data loss.
+ */
+export async function migrateLegacyDatabase(): Promise<boolean> {
+  if (typeof window === 'undefined' || !window.indexedDB) return false
+  try {
+    const currentCount = await db.books.count()
+    if (currentCount > 0) return false
+
+    const legacyExists = await Dexie.exists('inkling')
+    if (!legacyExists) return false
+
+    const legacyDb = new Dexie('inkling')
+    await legacyDb.open()
+    const tableNames = legacyDb.tables.map((t) => t.name)
+    if (!tableNames.includes('books')) {
+      legacyDb.close()
+      return false
+    }
+
+    const legacyBooks = (await legacyDb.table('books').toArray()) as Book[]
+    if (!legacyBooks || legacyBooks.length === 0) {
+      legacyDb.close()
+      return false
+    }
+
+    const legacyContents = tableNames.includes('contents')
+      ? ((await legacyDb.table('contents').toArray()) as Content[])
+      : []
+    const legacyAnnotations = tableNames.includes('annotations')
+      ? ((await legacyDb.table('annotations').toArray()) as Annotation[])
+      : []
+    const legacyPrefs = tableNames.includes('prefs')
+      ? ((await legacyDb.table('prefs').toArray()) as Prefs[])
+      : []
+
+    await db.transaction('rw', db.books, db.contents, db.annotations, db.prefs, async () => {
+      if (legacyBooks.length) await db.books.bulkPut(legacyBooks)
+      if (legacyContents.length) await db.contents.bulkPut(legacyContents)
+      if (legacyAnnotations.length) await db.annotations.bulkPut(legacyAnnotations)
+      for (const p of legacyPrefs) {
+        await db.prefs.put(p, 'reader')
+      }
+    })
+
+    legacyDb.close()
+    return true
+  } catch (err) {
+    console.warn('[InklingDatabase] Legacy database migration skipped:', err)
+    return false
+  }
+}

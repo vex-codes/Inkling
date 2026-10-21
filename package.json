@@ -12,6 +12,7 @@
   "dependencies": {
     "dexie": "^4.4.6",
     "epubjs": "^0.3.93",
+    "jszip": "^3.10.2",
     "lucide-react": "^1.59.0",
     "pdfjs-dist": "^6.4.299",
     "react": "^19.3.1",
@@ -20,6 +21,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "@types/jszip": "^3.4.0",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

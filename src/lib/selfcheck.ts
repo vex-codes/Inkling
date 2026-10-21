@@ -103,4 +103,68 @@ assert.equal(extracted[1].title, 'Preface')
 assert.equal(extracted[2].title, 'Frankenstein')
 console.log('✓ Hierarchical Table of Contents extraction verified.')
 
+// 9. Digital Binder (.inkling) Archive Specification & Round-trip Verification
+import JSZip from 'jszip'
+const testManifest = {
+  version: '1.0',
+  id: 'book-uuid-1984',
+  title: '1984',
+  author: 'George Orwell',
+  format: 'epub' as const,
+  totalUnits: 320,
+  lastLocation: {
+    cfi: 'epubcfi(/6/14[chapter-2]!/4/2/1:0)',
+    pageNumber: 42,
+    percentage: 0.13,
+  },
+  exportedAt: '2026-10-20T18:00:00.000Z',
+}
+const testAnnotations = [
+  {
+    id: 'ann-1',
+    bookId: 'book-uuid-1984',
+    page: 41,
+    start: 10,
+    end: 45,
+    quote: 'War is peace. Freedom is slavery.',
+    kind: 'highlight',
+    color: 'ochre',
+    note: 'Doublethink core paradox',
+    createdAt: 1700000000000,
+  },
+]
+const dummyRawBytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00, 0x00]) // Mock raw zip/epub
+const zipOut = new JSZip()
+zipOut.file('book.bin', dummyRawBytes)
+zipOut.file('manifest.json', JSON.stringify(testManifest, null, 2))
+zipOut.file('annotations.json', JSON.stringify(testAnnotations, null, 2))
+zipOut.file('pages.json', JSON.stringify(['<h1>Chapter 1</h1>', '<p>It was a bright cold day in April...</p>']))
+
+const archiveBuffer = await zipOut.generateAsync({ type: 'nodebuffer' })
+assert.ok(archiveBuffer.length > 0, '.inkling archive generated non-empty buffer')
+
+// Ingest / Unpack
+const zipIn = await JSZip.loadAsync(archiveBuffer)
+assert.ok(zipIn.file('book.bin'), 'book.bin present in .inkling')
+assert.ok(zipIn.file('manifest.json'), 'manifest.json present in .inkling')
+assert.ok(zipIn.file('annotations.json'), 'annotations.json present in .inkling')
+assert.ok(zipIn.file('pages.json'), 'pages.json present in .inkling')
+
+const parsedManifest = JSON.parse(await zipIn.file('manifest.json')!.async('string'))
+assert.equal(parsedManifest.version, '1.0')
+assert.equal(parsedManifest.id, 'book-uuid-1984')
+assert.equal(parsedManifest.title, '1984')
+assert.equal(parsedManifest.author, 'George Orwell')
+assert.equal(parsedManifest.lastLocation.pageNumber, 42)
+
+const parsedAnnotations = JSON.parse(await zipIn.file('annotations.json')!.async('string'))
+assert.equal(parsedAnnotations.length, 1)
+assert.equal(parsedAnnotations[0].quote, 'War is peace. Freedom is slavery.')
+
+const parsedBin = await zipIn.file('book.bin')!.async('nodebuffer')
+assert.equal(parsedBin[0], 0x50)
+assert.equal(parsedBin[1], 0x4b)
+console.log('✓ Digital Binder (.inkling) archive packaging and extraction verified.')
+
 console.log('✓ All unit and stress-test assertions passed cleanly.')
+
